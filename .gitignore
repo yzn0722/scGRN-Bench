@@ -1,0 +1,60 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.python-version
+
+# Virtual envs
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# =========================
+# OS / IDE
+# =========================
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# =========================
+# Logs / temp
+# =========================
+*.log
+*.tmp
+*.temp
+tmp/
+temp/
+
+# =========================
+# Large model/data artifacts
+# =========================
+models/weights/
+models/sc_foundation_evals/sccello/data/
+
+# Common ML artifact extensions
+*.pt
+*.pth
+*.bin
+*.ckpt
+*.h5
+*.h5ad
+*.loom
+*.npz
+*.npy
+*.parquet
+
+# =========================
+# Project runtime outputs
+# =========================
+outputs/
+results/
+results_*/
+plot_output_summary/

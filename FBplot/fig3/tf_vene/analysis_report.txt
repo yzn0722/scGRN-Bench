@@ -1,0 +1,39 @@
+TF重叠分析报告
+==================================================
+
+1. 数据概况
+--------------------
+scGPT-att500: 41 个top TF
+scGPT-emb500: 50 个top TF
+scGPT-embhidden500: 50 个top TF
+
+2. 重叠分析
+--------------------
+重叠TF总数: 11
+重叠稳定性指数: 0.268
+
+重叠TF列表:
+  - APEX1
+  - HNRNPK
+  - ILF2
+  - NONO
+  - PARP1
+  - RBMX
+  - RNPS1
+  - SNRPB
+  - SNRPD1
+  - SSB
+  - YBX1
+
+3. 重要TF排名
+--------------------
+ 5. PARP1           Jaccard=34.333 Rank=34.3±6.3
+ 4. NONO            Jaccard=27.000 Rank=27.0±7.0
+ 1. APEX1           Jaccard=26.333 Rank=26.3±3.3
+10. SSB             Jaccard=23.333 Rank=23.3±4.2
+ 3. ILF2            Jaccard=19.333 Rank=19.3±5.3
+ 8. SNRPB           Jaccard=16.000 Rank=16.0±5.0
+11. YBX1            Jaccard=16.000 Rank=16.0±11.0
+ 7. RNPS1           Jaccard=13.333 Rank=13.3±4.8
+ 6. RBMX            Jaccard=9.333 Rank=9.3±5.4
+ 2. HNRNPK          Jaccard=8.333 Rank=8.3±5.6

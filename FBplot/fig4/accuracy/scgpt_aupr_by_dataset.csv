@@ -1,0 +1,6 @@
+Dataset,AUPR_Up_vs_Down,Baseline_PosRate,N_Used,Path
+hESC,0.8918741289449287,0.5637362637362637,910,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/hESC_gene_result.csv
+hHep,0.858575250589913,0.27848101265822783,948,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/hHep_gene_result.csv
+mDC,0.011627906976744186,0.001218026796589525,821,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/mDC_gene_result.csv
+mHSC-E,0.804485986521592,0.6818181818181818,704,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/mHSC-E_gene_result.csv
+mHSC-GM,0.8208737480858893,0.6677215189873418,632,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/mHSC-GM_gene_result.csv

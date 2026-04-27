@@ -1,0 +1,6 @@
+Model,AUPR_Up_vs_Down,Baseline_PosRate,N_Used,Path
+scGPT,0.8918741289449287,0.5637362637362637,910,/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/hESC_gene_result.csv
+Geneformer,0.8227181347129144,0.5659340659340659,910,/mnt/10T/yzn/benchmark_GRN/pre_geneformer_results_unified/geneformer/hESC_gene_result.csv
+LangCell,0.8716784417131026,0.5659340659340659,910,/mnt/10T/yzn/benchmark_GRN/pre_langcell_results_unified/langcell/hESC_gene_result.csv
+scFoundation,0.8993997941927441,0.5637362637362637,910,/mnt/10T/yzn/benchmark_GRN/pre_scfoundation/scfoundation_multidataset_pseudotime_227/hESC/gene_delta_compare.csv
+scPrint,0.907506131805505,0.5485854858548586,813,/mnt/10T/yzn/benchmark_GRN/pre_scprint_results_unified/scprint/per_dataset/hESC/per_gene_final_changes.csv

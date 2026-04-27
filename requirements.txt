@@ -1,0 +1,26 @@
+numpy
+pandas
+scikit-learn
+matplotlib
+seaborn
+networkx
+scipy
+tqdm
+pyyaml
+
+# Optional / model-specific (install only if needed):
+# torch
+# scanpy
+# scgpt
+
+# Optional / local packages used by some scripts:
+# - scPRINT (used by `src/extract_model/attention/scPRINT.py`)
+#   pip install scprint
+scprint
+mygene
+
+# Optional / local tarball (user-provided):
+# If you need your local singlecell package, install from:
+#   /mnt/10T/yzn/singlecell.tar.gz
+# You can enable the line below (requires the tarball to exist on the machine):
+# singlecell @ file:///mnt/10T/yzn/singlecell.tar.gz

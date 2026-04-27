@@ -1,0 +1,2 @@
+Dataset,Model,Extraction,PredPath,STRING_Edges,FilteredEdges,PlotNodes,PlotEdges,Communities,Modularity
+hESC,scGPT,att500,/mnt/10T/yzn/benchmark_GRN/evl_omipath/output_att500/scgpt/scgpt_hESC.tsv,4257,4257,350,4227,4,0.16563059726949372
