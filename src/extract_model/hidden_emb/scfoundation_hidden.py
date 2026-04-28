@@ -2,12 +2,12 @@
 # -*- coding: utf-8 -*-
 
 """
-scFoundation hidden -> cosine edges (统一输入/输出规则版本)
+scFoundation hidden -> cosine edges (/)
 
-✅ 仅用“原始输入基因集合”（比如 910）来生成边：
-  - 先补齐到官方 19264 基因跑模型
-  - 再从 19264 embedding 中筛回原始基因对应 embedding
-  - 只对筛回的基因做余弦边
+""( 910)Generated:
+  -  19264 Model
+  -  19264 embedding  embedding
+  - 
 
 """
 
@@ -28,7 +28,7 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
-# ====================== 全局配置 ======================
+# ======================  ======================
 CONFIG = {
     "INPUT_ROOT": "",
     "OUTPUT_ROOT": "",
@@ -43,7 +43,7 @@ CONFIG = {
     "BATCH_SIZE": 8,
 
     "SAVE_ALL_EDGES": True,      # True: all i!=j edges (stream)
-    "TOPK_PER_GENE": 1000,       # 保留接口（这里不用）
+    "TOPK_PER_GENE": 1000,       # ()
 
     "SEED": 42,
 }
@@ -76,7 +76,7 @@ INPUT_ROOT = Path(CONFIG["INPUT_ROOT"])
 OUTPUT_ROOT = Path(CONFIG["OUTPUT_ROOT"])
 OUTPUT_ROOT.mkdir(parents=True, exist_ok=True)
 
-# ====================== 修复 import: load.py 定位 ======================
+# ======================  import: load.py  ======================
 SCFOUNDATION_ROOT = Path(CONFIG["SCFOUNDATION_ROOT"])
 CANDIDATE_PATHS = [
     SCFOUNDATION_ROOT / "model",                 # /.../scFoundation-main/model/load.py
@@ -92,14 +92,14 @@ for p in CANDIDATE_PATHS:
 
 if not found:
     raise FileNotFoundError(
-        "找不到 load.py，请确认 scFoundation 路径。已尝试：\n" +
+        " load.py, scFoundation .:\n" +
         "\n".join([str(x) for x in CANDIDATE_PATHS])
     )
 
 from load import load_model_frommmf, getEncoerDecoderData
 
 
-# ====================== 1. 基因补齐（保持逻辑） ======================
+# ====================== 1. () ======================
 def main_gene_selection(X_df: pd.DataFrame, gene_list: list):
     to_fill_columns = list(set(gene_list) - set(X_df.columns))
     padding_df = pd.DataFrame(
@@ -117,7 +117,7 @@ def load_official_gene_list():
     return list(gene_list_df["gene_name"])
 
 
-# ====================== 2. 模型加载 ======================
+# ====================== 2. Model ======================
 def set_seed(seed: int):
     random.seed(seed)
     np.random.seed(seed)
@@ -138,11 +138,11 @@ def load_official_model():
     pretrainmodel.eval()
     pretrainmodel.to_final = None
 
-    print(f"✅ 模型加载完成 | 设备: {CONFIG['DEVICE']}")
+    print(f"[INFO] Model loaded | device: {CONFIG['DEVICE']}")
     return pretrainmodel, pretrainconfig
 
 
-# ====================== 3. 输入读取 + dataset name ======================
+# ====================== 3.  + dataset name ======================
 def extract_dataset_name(file_path: str) -> str:
     base = os.path.basename(file_path)
     if "_chip_matched-ExpressionData.csv" in base:
@@ -154,8 +154,8 @@ def extract_dataset_name(file_path: str) -> str:
 
 def read_expression_matrix_gene_by_cell(expr_path: str) -> pd.DataFrame:
     """
-    读取 ExpressionData.csv（gene x cell），返回 cell x gene
-    并将 gene 名统一为 upper+strip（匹配你后续逻辑）
+     ExpressionData.csv(gene x cell), cell x gene
+     gene  upper+strip()
     """
     df = None
     try:
@@ -179,9 +179,9 @@ def read_expression_matrix_gene_by_cell(expr_path: str) -> pd.DataFrame:
     return expr_df
 
 
-# ====================== 4. 提取 embedding mean（修复：全细胞求均值） ======================
+# ====================== 4.  embedding mean(:) ======================
 def extract_gene_embedding_mean(expr_path: str, model, pretrainconfig):
-    print(f"\n🔍 处理文件: {expr_path}")
+    print(f"\n[INFO] Processing file: {expr_path}")
     official_gene_list = load_official_gene_list()
 
     expr_df = read_expression_matrix_gene_by_cell(expr_path)
@@ -189,8 +189,8 @@ def extract_gene_embedding_mean(expr_path: str, model, pretrainconfig):
 
     expr_df, to_fill_cols = main_gene_selection(expr_df, official_gene_list)
     n_cells_total = expr_df.shape[0]
-    print(f"📏 补齐后维度: cells={expr_df.shape[0]} | genes={expr_df.shape[1]} (filled={len(to_fill_cols)})")
-    assert expr_df.shape[1] == 19264, "基因数未补齐到19264！"
+    print(f"📏 : cells={expr_df.shape[0]} | genes={expr_df.shape[1]} (filled={len(to_fill_cols)})")
+    assert expr_df.shape[1] == 19264, "19264!"
 
     batch_size = int(CONFIG["BATCH_SIZE"])
     device = CONFIG["DEVICE"]
@@ -242,12 +242,12 @@ def extract_gene_embedding_mean(expr_path: str, model, pretrainconfig):
             count += gene_emb_batch.shape[0]
 
     gene_embeddings_mean = sum_emb / max(count, 1)
-    print(f"✅ Embedding提取完成 | cells={count} | emb shape={gene_embeddings_mean.shape}")
+    print(f"[INFO] Embedding extraction complete | cells={count} | shape={gene_embeddings_mean.shape}")
 
     return gene_embeddings_mean, official_gene_list, original_genes_upper, int(n_cells_total)
 
 
-# ====================== 5. 余弦边：流式写出 ======================
+# ====================== 5. : ======================
 def compute_and_save_all_cosine_edges_stream(genes: list, emb: np.ndarray, out_path: Path):
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -272,7 +272,7 @@ def compute_and_save_all_cosine_edges_stream(genes: list, emb: np.ndarray, out_p
     return {"mode": "all_stream", "n_genes": int(N), "n_edges": int(total_edges)}
 
 
-# ====================== 6. 单数据集处理（统一输出） ======================
+# ====================== 6. Dataset() ======================
 def process_single_dataset(expr_path: str, folder_name: str, model, pretrainconfig):
     start_time = datetime.datetime.now()
     dataset_name = extract_dataset_name(expr_path)
@@ -322,7 +322,7 @@ def process_single_dataset(expr_path: str, folder_name: str, model, pretrainconf
         record["Unmatched_Genes_Count"] = int(len(unmatched))
 
         if len(matched_genes) < 2:
-            raise RuntimeError(f"Matched genes < 2 (matched={len(matched_genes)})，无法生成边。")
+            raise RuntimeError(f"Matched genes < 2 (matched={len(matched_genes)}),Generated.")
 
         emb_filtered = gene_emb_19264[np.array(matched_idx, dtype=int)]
         record["Final_Genes_Count"] = int(emb_filtered.shape[0])
@@ -370,22 +370,22 @@ def process_single_dataset(expr_path: str, folder_name: str, model, pretrainconf
             json.dump(run_params, f, indent=2, ensure_ascii=False)
 
         record["Process_Time_Seconds"] = run_params["processing_time_seconds"]
-        print(f"✅ 完成：{dataset_name} | edges={edge_tsv} | time={record['Process_Time_Seconds']}s")
+        print(f"[INFO] Completed: {dataset_name} | edges={edge_tsv} | time={record['Process_Time_Seconds']}s")
 
     except Exception as e:
         traceback.print_exc()
         record["Process_Status"] = "Failed"
         record["Error_Message"] = str(e)[:300]
-        print(f"❌ 处理失败: {dataset_name} | {record['Error_Message']}")
+        print(f"[ERROR] Failed: {dataset_name} | {record['Error_Message']}")
 
     return record
 
 
-# ====================== 7. 批量处理（统一输入规则） ======================
+# ====================== 7. () ======================
 def process_all_datasets():
-    print("🚀 开始 scFoundation 批量处理（统一输入/输出规则）")
-    print(f"📥 INPUT_ROOT : {INPUT_ROOT}")
-    print(f"📤 OUTPUT_ROOT: {OUTPUT_ROOT}\n")
+    print("[INFO] Start scFoundation batch processing (unified input/output).")
+    print(f"[INFO] INPUT_ROOT : {INPUT_ROOT}")
+    print(f"[INFO] OUTPUT_ROOT: {OUTPUT_ROOT}\n")
 
     model, pretrainconfig = load_official_model()
 
@@ -395,7 +395,7 @@ def process_all_datasets():
     for folder in target_folders:
         folder_path = INPUT_ROOT / folder
         if not folder_path.exists():
-            print(f"⚠️ 文件夹不存在，跳过: {folder_path}")
+            print(f"[WARN] Folder not found, skip: {folder_path}")
             continue
 
         if folder == "CHIP":
@@ -404,7 +404,7 @@ def process_all_datasets():
             expr_files = list(folder_path.glob("*_processed-ExpressionData.csv"))
 
         print(f"\n{'='*60}")
-        print(f"📂 Folder: {folder} | found {len(expr_files)} files")
+        print(f"[INFO] Folder: {folder} | found {len(expr_files)} files")
 
         for expr_file in expr_files:
             rec = process_single_dataset(str(expr_file), folder, model, pretrainconfig)
@@ -416,11 +416,11 @@ def process_all_datasets():
         summary_df.to_csv(summary_path, index=False)
         ok = sum(r["Process_Status"] == "Success" for r in all_records)
         fail = len(all_records) - ok
-        print(f"\n📊 汇总记录: {summary_path}")
-        print(f"📈 统计: 成功 {ok} / 失败 {fail}")
+        print(f"\n[INFO] Summary file: {summary_path}")
+        print(f"[INFO] Statistics: success {ok} / fail {fail}")
 
     print(f"\n{'='*60}")
-    print(f"🎉 全部完成！结果保存在: {OUTPUT_ROOT}")
+    print(f"[INFO] All done. Outputs saved in: {OUTPUT_ROOT}")
 
 
 if __name__ == "__main__":

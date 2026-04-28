@@ -3,12 +3,12 @@
 """
 Unified pseudotime benchmark entry for Geneformer / LangCell / scGPT / scFoundation.
 
-方向准确率定义（各连续模型一致）：
-  true_delta = late 细胞基因均值 − early 细胞基因均值；
-  pred_delta = 迭代后预测（early 细胞上平均）− 同一 early 基线均值；
-  在 |true_delta| 最大的 top% 基因上比较 sign(pred_delta) 与 sign(true_delta)。
+(Model):
+  true_delta = late  − early ;
+  pred_delta = (early )−  early ;
+   |true_delta|  top%  sign(pred_delta)  sign(true_delta).
 
-Token 模型用排位变化经负号与表达变化对齐（见 direction_accuracy_top_genes 与代码注释）。
+Token Model( direction_accuracy_top_genes ).
 
 Examples:
   python run_unified_multidataset_pseudotime.py --model geneformer
@@ -87,14 +87,14 @@ def parse_args():
         "--max-early-cells",
         type=int,
         default=0,
-        help="Token models only: 参与迭代的 early 细胞数上限（0=使用全部 early，与 true_delta 的 early 定义一致）。"
-        "旧版曾只用前 batch_size 个细胞，会导致预测均值与全数据上的 late−early 不对齐。",
+        help="Token models only:  early (0= early, true_delta  early )."
+        " batch_size , late−early .",
     )
     parser.add_argument(
         "--acc-eps",
         type=float,
         default=0.0,
-        help="方向准确率：若 >0，仅在 |true_delta|>eps 的评估基因上计分（0 表示与原先一致，含 |Δ|≈0 的基因）。",
+        help=": >0, |true_delta|>eps (0 , |Δ|≈0 ).",
     )
     parser.add_argument("--max-len", type=int, default=1024)
     parser.add_argument("--mask-ratio", type=float, default=0.3)
@@ -263,12 +263,12 @@ def direction_accuracy_top_genes(
     eps: float = 0.0,
 ) -> Tuple[float, float]:
     """
-    方向准确率：与「真实变化 = 晚期均值 − 早期均值」「预测变化 = 预测终态 − 早期均值」在符号上是否一致。
+    :「 =  − 」「 =  − 」.
 
-    - pred_delta: 每个基因上「预测相对 early 基线」的变化（与 scGPT 的 pred_mean − early_mean 同义）。
-    - true_delta: 每个基因上 late_mean − early_mean。
-    - top_idx: 在 |true_delta| 最大的 top% 基因上评估（由调用方事先算好）。
-    - eps: 若 >0，则仅对 |true_delta| > eps 的基因计分（接近 0 的「方向」不定义，与 scFoundation 的 eps_dir 类似）。
+    - pred_delta: 「 early 」( scGPT  pred_mean − early_mean ).
+    - true_delta:  late_mean − early_mean.
+    - top_idx:  |true_delta|  top% ().
+    - eps:  >0, |true_delta| > eps ( 0 「」, scFoundation  eps_dir ).
     """
     td = true_delta[top_idx]
     pd = pred_delta[top_idx]
@@ -278,9 +278,9 @@ def direction_accuracy_top_genes(
             return float("nan"), float("nan")
         td = td[m]
         pd = pd[m]
-    # 与你在 *_gene_result.csv 里的定义一致：
+    #  *_gene_result.csv :
     #   dir = "Up" if delta > 0 else "Down"
-    # 也就是：delta==0 视为 Down（方向永不为 0）。
+    # :delta==0  Down( 0).
     true_dir = np.where(td > 0, 1, -1)
     pred_dir = np.where(pd > 0, 1, -1)
     acc = float((pred_dir == true_dir).mean())
@@ -708,8 +708,8 @@ def run_token_model_dataset(
         curr_cells = next_cells
 
         mean_delta = np.stack(deltas_batch).mean(axis=0)
-        # 预测相对「初始序列排位」的变化；与表达 log1p 的 true_delta 对齐方向时取负号：
-        # rank 变小 ≈ 高表达上调，对应 -mean_delta 与正 true_delta 同向。
+        # 「」; log1p  true_delta :
+        # rank  ≈ , -mean_delta  true_delta .
         pred_delta_expr_aligned = -mean_delta.astype(np.float32, copy=False)
         acc_now, inv_now = direction_accuracy_top_genes(
             pred_delta_expr_aligned,
@@ -1220,7 +1220,7 @@ def _scf_iterative_predict_curve(
         pred_mean_eval = vals[:, eval_model_idx].detach().float().mean(dim=0).cpu().numpy()
         pred_delta_eval = pred_mean_eval - early_mean_eval
         pred_delta_eval_per_iter.append(pred_delta_eval.astype(np.float32, copy=False))
-        # 与 scGPT/你的 *_gene_result.csv 一致：delta>0 为 Up，否则为 Down（delta==0 也算 Down，不排除）
+        #  scGPT/ *_gene_result.csv :delta>0  Up, Down(delta==0  Down,)
         true_dir = np.where(true_delta_eval > 0, 1, -1)
         pred_dir = np.where(pred_delta_eval > 0, 1, -1)
         acc = float((pred_dir == true_dir).mean())
@@ -1295,7 +1295,7 @@ def run_scfoundation_dataset(name, cfg, model, config, gene2idx_model: Dict[str,
     preds_910_batches: List[np.ndarray] = []
     preds_full_by_iter = None
     if args.save_cell_preds_by_iter:
-        # 保存在「数据集基因」空间：[iter, n_early, n_genes]，而不是完整 G_model 词表。
+        # 「Dataset」:[iter, n_early, n_genes], G_model .
         preds_full_by_iter = np.zeros((args.gen_iters, len(early_idx), n_genes), dtype=np.float32)
 
     for s in range(0, len(early_idx), args.batch_size):
@@ -1330,8 +1330,8 @@ def run_scfoundation_dataset(name, cfg, model, config, gene2idx_model: Dict[str,
                 save_full_cells_by_iter=True,
             )
             vals_arr = np.stack(vals_by_iter_batch, axis=0)  # [n_iters, B, G_model]
-            # 将模型空间的预测映射回「数据集基因」空间。
-            # 对每个基因 j，若在模型中有对应 index，则取 vals_arr[..., midx]；否则回退为原始 X_proc。
+            # Model「Dataset」.
+            #  j,Model index, vals_arr[..., midx]; X_proc.
             for it in range(args.gen_iters):
                 for j in range(n_genes):
                     midx = int(map_idx[j])
@@ -1708,11 +1708,11 @@ def save_dataset_artifacts(outdir: Path, name: str, args, diag: dict, artifacts:
         true_late_mean = artifacts["late_mean"]
         delta_true = true_late_mean - true_early_mean
 
-        # token 模型只关心“排名上升/下降”的方向，不输出伪表达数值：
+        # token Model"/",:
         #   rank_delta = pos_after - pos_before
-        #   rank 上升(位置变小) => pred_dir_from_rank_final = -rank_delta > 0 => Up
+        #   rank () => pred_dir_from_rank_final = -rank_delta > 0 => Up
         pred_late_like_mean = np.full_like(true_early_mean, np.nan, dtype=np.float32)
-        # 用 pred_dir_from_rank_final 作为 delta_pred：其符号直接对应 Up/Down（与 dir_pred 逻辑一致）
+        #  pred_dir_from_rank_final  delta_pred: Up/Down( dir_pred )
         delta_pred = pred_dir_from_rank_final.astype(np.float32, copy=False)
 
         dir_true = np.where(delta_true > 0, "Up", "Down")
@@ -1731,7 +1731,7 @@ def save_dataset_artifacts(outdir: Path, name: str, args, diag: dict, artifacts:
                 "dir_correct": dir_correct,
             }
         )
-        # 保存到 per_dataset/<name>/...，同时也保存到 outdir/<name>_gene_result.csv，便于与你原 scGPT 输出对齐。
+        #  per_dataset/<name>/..., outdir/<name>_gene_result.csv, scGPT .
         gene_result_df.to_csv(ds_dir / f"{name}_gene_result.csv", index=False, float_format="%.15g")
         gene_result_df.to_csv(outdir / f"{name}_gene_result.csv", index=False, float_format="%.15g")
 

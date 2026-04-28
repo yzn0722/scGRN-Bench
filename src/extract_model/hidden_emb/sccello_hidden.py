@@ -9,7 +9,7 @@
 # from tqdm import tqdm
 # import json
 
-# # -------------------------- 全局配置 --------------------------
+# # --------------------------  --------------------------
 # INPUT_ROOT = "/mnt/10T/yzn/benchmark_GRN/input_process"
 # OUTPUT_ROOT = "/mnt/10T/yzn/benchmark_GRN/evl_omipath/output_emb500/sccello_hidden"
 
@@ -17,36 +17,36 @@
 # MODEL_DIR = "/mnt/10T/yzn/benchmark_GRN/model/weights/scCello"
 # DICT_DIR = "/mnt/10T/yzn/benchmark_GRN/model/weights/Geneformer/dicts"
 
-# # Hidden state 配置
+# # Hidden state 
 # CONFIG = {
-#     "HIDDEN_LAYER": -1,        # 提取最后一层 hidden states
-#     "SEQ_TOPK_GENES": 256,     # 每个细胞选择 top-K 高表达基因
-#     "MAX_SEQ_LEN": 256,        # 最大序列长度
-#     "N_CELLS": None,           # None = 使用所有细胞
-#     "USE_LOG1P": False,         # 是否 log1p 归一化
-#     "BATCH_SIZE": 16,          # 批处理大小
-#     "SAVE_ALL_EDGES": True,    # 保存所有边
+#     "HIDDEN_LAYER": -1,        #  hidden states
+#     "SEQ_TOPK_GENES": 256,     #  top-K 
+#     "MAX_SEQ_LEN": 256,        # 
+#     "N_CELLS": None,           # None = 
+#     "USE_LOG1P": False,         #  log1p 
+#     "BATCH_SIZE": 16,          # 
+#     "SAVE_ALL_EDGES": True,    # 
 # }
 
-# # 添加依赖路径
+# # 
 # sys.path.insert(0, "/mnt/10T/yzn/benchmark_GRN")
 # sys.path.insert(0, "/mnt/10T/yzn/benchmark_GRN/sc_foundation_evals")
 
 # from sc_foundation_evals.sccello.src.model_prototype_contrastive import PrototypeContrastiveModel
 
-# # 创建输出目录
+# # Create the output directory
 # os.makedirs(OUTPUT_ROOT, exist_ok=True)
-# print(f"✅ 初始化完成 | 输出根目录：{OUTPUT_ROOT}")
+# print(f"[INFO]  | Output root:{OUTPUT_ROOT}")
 
-# # -------------------------- 加载模型和字典 --------------------------
+# # -------------------------- Model --------------------------
 # def load_sccello_resources():
-#     """加载 scCello 模型和基因字典"""
-#     # 1. 加载模型
-#     print(f"📦 加载 scCello 模型: {MODEL_DIR}")
+#     """ scCello Model"""
+#     # 1. Model
+#     print(f"📦  scCello Model: {MODEL_DIR}")
 #     model = PrototypeContrastiveModel.from_pretrained(MODEL_DIR, ignore_mismatched_sizes=True)
-#     model.eval()  # 设置为评估模式
+#     model.eval()  # 
     
-#     # 2. 加载字典
+#     # 2. 
 #     with open(os.path.join(DICT_DIR, "token_dictionary.pkl"), "rb") as f:
 #         token_dict = pickle.load(f)
 #     with open(os.path.join(DICT_DIR, "gene_name_id_dict.pkl"), "rb") as f:
@@ -54,17 +54,17 @@
     
 #     gene_id_name = {v: k for k, v in gene_name_id.items()}
     
-#     print(f"✅ Token dictionary: {len(token_dict)} tokens")
-#     print(f"✅ Gene name dictionary: {len(gene_name_id)} symbols")
+#     print(f"[INFO] Token dictionary: {len(token_dict)} tokens")
+#     print(f"[INFO] Gene name dictionary: {len(gene_name_id)} symbols")
     
 #     return model, token_dict, gene_name_id, gene_id_name
 
-# # 全局加载
+# # 
 # MODEL, TOKEN_DICT, GENE_NAME_ID, GENE_ID_NAME = load_sccello_resources()
 
-# # -------------------------- 工具函数 --------------------------
+# # --------------------------  --------------------------
 # def extract_dataset_name(file_path):
-#     """提取纯数据集名（移除后缀）"""
+#     """Extract the normalized dataset name()"""
 #     file_basename = os.path.basename(file_path)
 #     if "_chip_matched-ExpressionData.csv" in file_basename:
 #         dataset_name = file_basename.split('_chip_matched-ExpressionData.csv')[0]
@@ -74,24 +74,24 @@
 #         dataset_name = file_basename.split('-ExpressionData.csv')[0]
 #     return dataset_name
 
-# # -------------------------- 序列构建 --------------------------
+# # --------------------------  --------------------------
 # def build_gene_sequences(expr_df, token_dict, gene_name_id, config):
 #     """
-#     根据表达矩阵构建基因序列（类似 Geneformer）
+#     ( Geneformer)
     
 #     Returns:
-#         sequences: List[List[int]] - 每个细胞的 token id 序列
-#         gene_symbols: List[str] - 所有出现的基因 symbol
-#         gene_to_token: Dict[str, int] - 基因 symbol 到 token id 的映射
+#         sequences: List[List[int]] -  token id 
+#         gene_symbols: List[str] -  symbol
+#         gene_to_token: Dict[str, int] -  symbol  token id 
 #     """
-#     # 1. 提取基因和细胞
-#     gene_symbols = expr_df.iloc[1:, 0].tolist()  # 第一列是基因名
-#     expr_matrix = expr_df.iloc[1:, 1:].values.astype(float)  # 表达矩阵
+#     # 1. 
+#     gene_symbols = expr_df.iloc[1:, 0].tolist()  # 
+#     expr_matrix = expr_df.iloc[1:, 1:].values.astype(float)  # 
 #     n_genes, n_cells = expr_matrix.shape
     
 #     print(f"Expression matrix: {n_genes} genes x {n_cells} cells")
     
-#     # 2. 匹配基因到 token
+#     # 2.  token
 #     gene_to_token = {}
 #     valid_gene_idx = []
     
@@ -102,17 +102,17 @@
 #                 gene_to_token[symbol] = token_dict[ensg_id]
 #                 valid_gene_idx.append(i)
     
-#     print(f"✅ 匹配到的基因: {len(valid_gene_idx)}/{n_genes}")
+#     print(f"[INFO] : {len(valid_gene_idx)}/{n_genes}")
     
-#     # 3. 过滤表达矩阵
+#     # 3. 
 #     expr_matrix_filtered = expr_matrix[valid_gene_idx, :]
 #     valid_gene_symbols = [gene_symbols[i] for i in valid_gene_idx]
     
-#     # 4. 归一化（可选）
+#     # 4. ()
 #     if config["USE_LOG1P"]:
 #         expr_matrix_filtered = np.log1p(expr_matrix_filtered)
     
-#     # 5. 限制细胞数
+#     # 5. 
 #     if config["N_CELLS"] is not None and config["N_CELLS"] < n_cells:
 #         cell_indices = np.random.choice(n_cells, config["N_CELLS"], replace=False)
 #         expr_matrix_filtered = expr_matrix_filtered[:, cell_indices]
@@ -120,26 +120,26 @@
 #     else:
 #         n_cells_use = n_cells
     
-#     print(f"使用细胞数: {n_cells_use}")
+#     print(f": {n_cells_use}")
     
-#     # 6. 构建序列（每个细胞选 top-K 高表达基因）
+#     # 6. ( top-K )
 #     sequences = []
 #     topk = min(config["SEQ_TOPK_GENES"], len(valid_gene_symbols))
     
 #     for cell_idx in range(n_cells_use):
 #         expr_values = expr_matrix_filtered[:, cell_idx]
-#         topk_indices = np.argsort(expr_values)[-topk:][::-1]  # 降序
+#         topk_indices = np.argsort(expr_values)[-topk:][::-1]  # 
         
-#         # 构建 token id 序列
+#         #  token id 
 #         seq = [gene_to_token[valid_gene_symbols[i]] for i in topk_indices]
 #         sequences.append(seq[:config["MAX_SEQ_LEN"]])
     
 #     return sequences, valid_gene_symbols, gene_to_token
 
-# # -------------------------- 提取 Hidden States --------------------------
+# # --------------------------  Hidden States --------------------------
 # def extract_hidden_embeddings(model, sequences, gene_symbols, gene_to_token, config):
 #     """
-#     通过前向传播提取 hidden state embeddings
+#      hidden state embeddings
     
 #     Returns:
 #         gene_embeddings: np.ndarray [n_genes, hidden_dim]
@@ -152,14 +152,14 @@
 #     batch_size = config["BATCH_SIZE"]
 #     n_batches = (len(sequences) + batch_size - 1) // batch_size
     
-#     # 累积每个基因的 hidden states
+#     #  hidden states
 #     gene_hidden_accumulator = {symbol: [] for symbol in gene_symbols}
     
 #     print(f"Forward scCello (batch_size={batch_size}):")
     
 #     with torch.no_grad():
 #         for batch_idx in tqdm(range(n_batches), desc="Processing batches"):
-#             # 准备批次数据
+#             # 
 #             start_idx = batch_idx * batch_size
 #             end_idx = min(start_idx + batch_size, len(sequences))
 #             batch_seqs = sequences[start_idx:end_idx]
@@ -178,21 +178,21 @@
 #             input_ids = torch.tensor(input_ids, dtype=torch.long).to(device)
 #             attention_mask = torch.tensor(attention_mask, dtype=torch.long).to(device)
             
-#             # 前向传播
+#             # 
 #             outputs = model(
 #                 input_ids=input_ids,
 #                 attention_mask=attention_mask,
 #                 output_hidden_states=True
 #             )
             
-#             # 提取指定层的 hidden states
+#             #  hidden states
 #             hidden_states = outputs.hidden_states[config["HIDDEN_LAYER"]]
 #             # shape: [batch_size, seq_len, hidden_dim]
             
-#             # 累积每个基因的 hidden state
+#             #  hidden state
 #             for i, seq in enumerate(batch_seqs):
 #                 for j, token_id in enumerate(seq):
-#                     # 找到对应的基因 symbol
+#                     #  symbol
 #                     symbol = None
 #                     for s, tid in gene_to_token.items():
 #                         if tid == token_id:
@@ -203,7 +203,7 @@
 #                         hidden_vec = hidden_states[i, j, :].cpu().numpy()
 #                         gene_hidden_accumulator[symbol].append(hidden_vec)
     
-#     # 对每个基因求平均
+#     # 
 #     gene_embeddings = []
 #     final_gene_list = []
     
@@ -215,42 +215,42 @@
     
 #     gene_embeddings = np.array(gene_embeddings)
     
-#     print(f"✅ 最终 hidden embeddings: {len(final_gene_list)} genes x {hidden_dim} dim")
+#     print(f"[INFO]  hidden embeddings: {len(final_gene_list)} genes x {hidden_dim} dim")
     
 #     return gene_embeddings, final_gene_list
 
-# # -------------------------- 计算并保存所有余弦边 --------------------------
+# # --------------------------  --------------------------
 # def compute_and_save_all_cosine_edges(gene_list, embeddings, output_tsv):
 #     """
-#     计算所有基因对的余弦相似度并保存（去除自环）
+#     ()
     
 #     Returns:
-#         dict: 边的统计信息
+#         dict: 
 #     """
 #     n_genes = len(gene_list)
     
-#     # 计算余弦相似度矩阵
-#     print(f"计算 {n_genes}x{n_genes} 余弦相似度矩阵...")
+#     # 
+#     print(f" {n_genes}x{n_genes} ...")
 #     cosine_matrix = cosine_similarity(embeddings)
     
-#     # 构建边列表（去除自环）
+#     # ()
 #     edges = []
 #     for i in range(n_genes):
 #         for j in range(n_genes):
-#             if i != j:  # ⭐ 去除自环
+#             if i != j:  # ⭐ 
 #                 edges.append({
 #                     'Gene1': gene_list[i],
 #                     'Gene2': gene_list[j],
 #                     'EdgeWeight': round(float(cosine_matrix[i, j]), 15)
 #                 })
     
-#     # 保存为 TSV
+#     #  TSV
 #     edges_df = pd.DataFrame(edges)
 #     edges_df = edges_df.sort_values(by='EdgeWeight', ascending=False)
 #     edges_df.to_csv(output_tsv, sep='\t', index=False)
     
-#     print(f"✅ 保存所有边: {len(edges)} 条 (去除 {n_genes} 个自环)")
-#     print(f"   文件: {output_tsv}")
+#     print(f"[INFO] : {len(edges)}  ( {n_genes} )")
+#     print(f"   : {output_tsv}")
     
 #     return {
 #         "total_edges": len(edges),
@@ -258,17 +258,17 @@
 #         "self_loops_removed": n_genes
 #     }
 
-# # -------------------------- 主处理函数 --------------------------
+# # --------------------------  --------------------------
 # def process_single_dataset(expr_path, config):
-#     """处理单个数据集"""
+#     """Dataset"""
 #     start_time = datetime.now()
 #     dataset_name = extract_dataset_name(expr_path)
     
 #     print(f"\n{'='*60}")
-#     print(f"🔍 处理数据集：{dataset_name}")
-#     print(f"   Expr文件：{expr_path}")
+#     print(f"[INFO] Dataset:{dataset_name}")
+#     print(f"   Expr:{expr_path}")
     
-#     # 初始化记录
+#     # 
 #     record = {
 #         "Run_Datetime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
 #         "Model_Name": MODEL_NAME,
@@ -284,24 +284,24 @@
 #     }
     
 #     try:
-#         # 1. 读取表达矩阵
+#         # 1. 
 #         expr_df = pd.read_csv(expr_path)
-#         n_input_genes = len(expr_df) - 1  # 第一行是 header
+#         n_input_genes = len(expr_df) - 1  #  header
 #         record["Input_Genes_Count"] = n_input_genes
         
-#         # 2. 构建序列
+#         # 2. 
 #         sequences, gene_symbols, gene_to_token = build_gene_sequences(
 #             expr_df, TOKEN_DICT, GENE_NAME_ID, config
 #         )
 #         record["Matched_Genes_Count"] = len(gene_symbols)
         
-#         # 3. 提取 hidden embeddings
+#         # 3.  hidden embeddings
 #         gene_embeddings, final_gene_list = extract_hidden_embeddings(
 #             MODEL, sequences, gene_symbols, gene_to_token, config
 #         )
 #         record["Final_Genes_Count"] = len(final_gene_list)
         
-#         # 4. 保存 embeddings
+#         # 4.  embeddings
 #         dataset_output_dir = os.path.join(OUTPUT_ROOT, dataset_name)
 #         os.makedirs(dataset_output_dir, exist_ok=True)
         
@@ -309,15 +309,15 @@
 #         emb_df = pd.DataFrame(gene_embeddings, index=final_gene_list)
 #         emb_df.index.name = "Gene"
 #         emb_df.to_csv(emb_tsv, sep='\t')
-#         print(f"✅ Embeddings 保存: {emb_tsv}")
+#         print(f"[INFO] Embeddings : {emb_tsv}")
         
-#         # 5. 计算并保存所有余弦边
+#         # 5. 
 #         cosine_tsv = os.path.join(dataset_output_dir, f"{MODEL_NAME}_{dataset_name}_all_edges.tsv")
 #         cosine_info = compute_and_save_all_cosine_edges(final_gene_list, gene_embeddings, cosine_tsv)
 #         record["Total_Edges_Generated"] = cosine_info["total_edges"]
 #         record["Output_TSV_Path"] = cosine_tsv
         
-#         # 6. 保存元数据
+#         # 6. 
 #         meta = {
 #             "dataset": dataset_name,
 #             "model": MODEL_NAME,
@@ -332,25 +332,25 @@
 #         with open(meta_path, "w") as f:
 #             json.dump(meta, f, indent=2)
         
-#         # 7. 更新耗时
+#         # 7. 
 #         record["Process_Time_Seconds"] = round((datetime.now() - start_time).total_seconds(), 2)
-#         print(f"✅ 处理完成 | 耗时: {record['Process_Time_Seconds']}秒")
+#         print(f"[INFO]  | : {record['Process_Time_Seconds']}")
         
 #     except Exception as e:
-#         print(f"❌ 处理失败: {e}")
+#         print(f"[ERROR] : {e}")
 #         record["Process_Status"] = f"Failed: {str(e)[:100]}"
 #         import traceback
 #         traceback.print_exc()
     
 #     return record
 
-# # -------------------------- 批量处理 --------------------------
+# # --------------------------  --------------------------
 # def main():
-#     print(f"\n🚀 开始 scCello Hidden States 批量处理流程")
-#     print(f"输入根目录: {INPUT_ROOT}")
-#     print(f"输出根目录: {OUTPUT_ROOT}")
+#     print(f"\n[INFO]  scCello Hidden States ")
+#     print(f"Input root: {INPUT_ROOT}")
+#     print(f"Output root: {OUTPUT_ROOT}")
     
-#     # 创建输出根目录
+#     # Output root
 #     os.makedirs(OUTPUT_ROOT, exist_ok=True)
     
 #     target_folders = ["CHIP", "Non_CHIP", "STRING"]
@@ -359,30 +359,30 @@
 #     for folder in target_folders:
 #         folder_path = os.path.join(INPUT_ROOT, folder)
 #         if not os.path.exists(folder_path):
-#             print(f"\n⚠️ 文件夹不存在，跳过: {folder_path}")
+#             print(f"\n[WARN] does not exist,: {folder_path}")
 #             continue
         
 #         print(f"\n{'='*60}")
-#         print(f"📂 处理文件夹: {folder}")
+#         print(f"[INFO] : {folder}")
         
-#         # 找到所有 ExpressionData 文件
+#         #  ExpressionData 
 #         expr_files = [f for f in os.listdir(folder_path) if f.endswith('-ExpressionData.csv')]
-#         print(f"找到 {len(expr_files)} 个文件")
+#         print(f" {len(expr_files)} ")
         
 #         for expr_file in expr_files:
 #             expr_path = os.path.join(folder_path, expr_file)
 #             record = process_single_dataset(expr_path, CONFIG)
 #             all_records.append(record)
     
-#     # 保存汇总记录
+#     # 
 #     if all_records:
 #         summary_df = pd.DataFrame(all_records)
 #         summary_path = os.path.join(OUTPUT_ROOT, f"{MODEL_NAME}_hidden_processing_summary.csv")
 #         summary_df.to_csv(summary_path, index=False)
-#         print(f"\n📊 汇总记录保存: {summary_path}")
+#         print(f"\n[INFO] : {summary_path}")
     
 #     print(f"\n{'='*60}")
-#     print(f"🎉 所有处理完成！结果保存在: {OUTPUT_ROOT}")
+#     print(f"[INFO] !: {OUTPUT_ROOT}")
 
 # if __name__ == "__main__":
 #     main()
@@ -415,7 +415,7 @@ from tqdm import tqdm
 
 warnings.filterwarnings("ignore")
 
-# -------------------------- 全局配置 --------------------------
+# --------------------------  --------------------------
 INPUT_ROOT = ""
 OUTPUT_ROOT = ""
 
@@ -424,14 +424,14 @@ MODEL_DIR = ""
 DICT_DIR = ""
 
 CONFIG = {
-    "HIDDEN_LAYER": -1,        # 提取最后一层 hidden states
-    "SEQ_TOPK_GENES": 512,     # 每个细胞选择 top-K 高表达基因
-    "MAX_SEQ_LEN": 512,        # 最大序列长度
-    "N_CELLS": None,           # None = 使用所有细胞
-    "USE_LOG1P": False,        # 是否 log1p 归一化
-    "BATCH_SIZE": 16,          # 批处理大小
-    "SAVE_ALL_EDGES": True,    # True: 输出所有 i!=j 边（流式写）
-    "TOPK_PER_GENE": 1000,     # SAVE_ALL_EDGES=False 时启用
+    "HIDDEN_LAYER": -1,        #  hidden states
+    "SEQ_TOPK_GENES": 512,     #  top-K 
+    "MAX_SEQ_LEN": 512,        # 
+    "N_CELLS": None,           # None = 
+    "USE_LOG1P": False,        #  log1p 
+    "BATCH_SIZE": 16,          # 
+    "SAVE_ALL_EDGES": True,    # True:  i!=j ()
+    "TOPK_PER_GENE": 1000,     # SAVE_ALL_EDGES=False 
     "SEED": 42,
 }
 
@@ -463,10 +463,10 @@ if ARGS.repo_root:
 from sc_foundation_evals.sccello.src.model_prototype_contrastive import PrototypeContrastiveModel
 
 os.makedirs(OUTPUT_ROOT, exist_ok=True)
-print(f"✅ 初始化完成 | 输出根目录：{OUTPUT_ROOT}")
+print(f"[INFO] Initialization complete | output root: {OUTPUT_ROOT}")
 
 
-# -------------------------- 工具函数 --------------------------
+# --------------------------  --------------------------
 def set_seed(seed: int):
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -489,8 +489,8 @@ def extract_dataset_name(file_path: str) -> str:
 
 def read_expression_matrix(path: str) -> pd.DataFrame:
     """
-    统一读取：行=gene symbol，列=cell/sample
-    兼容 tsv/csv/不确定分隔符
+    :=gene symbol,=cell/sample
+     tsv/csv/
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Expression file not found: {path}")
@@ -510,7 +510,7 @@ def read_expression_matrix(path: str) -> pd.DataFrame:
     df = df[~df.index.isna()]
     df = df[~df.index.duplicated(keep="first")]
 
-    # 转数值
+    # 
     if df.select_dtypes(include=[np.number]).shape[1] == 0:
         for c in df.columns:
             df[c] = pd.to_numeric(df[c], errors="coerce")
@@ -527,13 +527,13 @@ def get_pad_id(token_dict: dict) -> int:
     for k in ["<pad>", "[PAD]", "pad", "PAD"]:
         if k in token_dict:
             return int(token_dict[k])
-    # scCello/Geneformer 通常 pad_id=0
+    # scCello/Geneformer  pad_id=0
     return 0
 
 
 def _get_hidden(outputs, layer_idx: int):
     """
-    兼容 outputs.hidden_states / outputs.last_hidden_state
+     outputs.hidden_states / outputs.last_hidden_state
     """
     if hasattr(outputs, "hidden_states") and outputs.hidden_states is not None:
         return outputs.hidden_states[layer_idx]
@@ -542,9 +542,9 @@ def _get_hidden(outputs, layer_idx: int):
     raise RuntimeError("Model outputs have no hidden states.")
 
 
-# -------------------------- 加载模型和字典（全局一次） --------------------------
+# -------------------------- Model() --------------------------
 def load_sccello_resources():
-    print(f"📦 加载 scCello 模型: {MODEL_DIR}")
+    print(f"📦  scCello Model: {MODEL_DIR}")
     model = PrototypeContrastiveModel.from_pretrained(MODEL_DIR, ignore_mismatched_sizes=True)
     model.eval()
 
@@ -553,24 +553,24 @@ def load_sccello_resources():
     with open(os.path.join(DICT_DIR, "gene_name_id_dict.pkl"), "rb") as f:
         gene_name_id = pickle.load(f)
 
-    print(f"✅ Token dictionary: {len(token_dict)} tokens")
-    print(f"✅ Gene name dictionary: {len(gene_name_id)} symbols")
+    print(f"[INFO] Token dictionary: {len(token_dict)} tokens")
+    print(f"[INFO] Gene name dictionary: {len(gene_name_id)} symbols")
     return model, token_dict, gene_name_id
 
 
 MODEL, TOKEN_DICT, GENE_NAME_ID = load_sccello_resources()
 
 
-# -------------------------- 序列构建（Geneformer-aligned mapping） --------------------------
+# -------------------------- (Geneformer-aligned mapping) --------------------------
 def build_gene_sequences(expr_df: pd.DataFrame, token_dict: dict, gene_name_id: dict, config: dict):
     """
     expr_df: index=Symbol, columns=cells
-    返回：
+    :
       sequences: List[List[int]]
-      token_id_to_symbol: Dict[int, str]  (用于快速反查 token->symbol)
+      token_id_to_symbol: Dict[int, str]  ( token->symbol)
       gene_to_token_id: Dict[str, int]
       used_cells: int
-      used_genes_for_seq: int (可映射基因数)
+      used_genes_for_seq: int ()
     """
     X = expr_df.values.astype(np.float32)  # [G, C]
     genes = expr_df.index.astype(str).tolist()
@@ -579,13 +579,13 @@ def build_gene_sequences(expr_df: pd.DataFrame, token_dict: dict, gene_name_id: 
     if config["USE_LOG1P"]:
         X = np.log1p(np.maximum(X, 0.0))
 
-    # Symbol -> token_id（和 Geneformer 逻辑一致：Symbol->ENSG->token）
+    # Symbol -> token_id( Geneformer :Symbol->ENSG->token)
     gene_to_token_id = {}
     token_id_to_symbol = {}
     mappable_idx = []
 
     for i, sym in enumerate(genes):
-        # direct match (如果 sym 本身就是 token key，比如 ENSG)
+        # direct match ( sym  token key, ENSG)
         if sym in token_dict:
             tid = int(token_dict[sym])
             gene_to_token_id[sym] = tid
@@ -629,12 +629,12 @@ def build_gene_sequences(expr_df: pd.DataFrame, token_dict: dict, gene_name_id: 
     return sequences, token_id_to_symbol, gene_to_token_id, int(len(col_idx)), int(len(mappable_idx)), pad_id
 
 
-# -------------------------- Hidden 提取（高效聚合） --------------------------
+# -------------------------- Hidden () --------------------------
 def extract_hidden_embeddings(model, sequences, token_id_to_symbol, pad_id: int, config: dict):
     """
-    返回：
+    :
       emb: np.ndarray [n_final_genes, hidden_dim]
-      final_genes: List[str]  (与 emb 行对应)
+      final_genes: List[str]  ( emb )
     """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
@@ -700,10 +700,10 @@ def extract_hidden_embeddings(model, sequences, token_id_to_symbol, pad_id: int,
     return emb, final_genes
 
 
-# -------------------------- 边输出：流式写（不爆内存） --------------------------
+# -------------------------- :() --------------------------
 def compute_and_save_all_cosine_edges_stream(genes, emb, out_path: str):
     """
-    输出所有 i!=j 的有向边（流式写），列：Gene1 Gene2 EdgeWeight
+     i!=j (),:Gene1 Gene2 EdgeWeight
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -730,7 +730,7 @@ def compute_and_save_all_cosine_edges_stream(genes, emb, out_path: str):
 
 def compute_and_save_topk_cosine_edges(genes, emb, out_path: str, topk: int):
     """
-    输出每个 Gene1 的 topK（有向）
+     Gene1  topK()
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -756,7 +756,7 @@ def compute_and_save_topk_cosine_edges(genes, emb, out_path: str, topk: int):
     return {"mode": "topk", "n_genes": int(N), "n_edges": int(total_edges), "topk_per_gene": int(topk)}
 
 
-# -------------------------- 单数据集流程（对齐 IO） --------------------------
+# -------------------------- Dataset( IO) --------------------------
 def process_single_dataset(expr_path: str, folder_name: str, config: dict):
     start_time = datetime.now()
     dataset_name = extract_dataset_name(expr_path)
@@ -783,27 +783,27 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
 
     try:
         print(f"\n{'='*60}")
-        print(f"🔍 处理数据集：{dataset_name} | Folder: {folder_name}")
-        print(f"   Expr文件：{expr_path}")
+        print(f"[INFO] Processing dataset: {dataset_name} | Folder: {folder_name}")
+        print(f"   Expr:{expr_path}")
 
-        # 1) 读取表达矩阵（统一：index=gene, columns=cells）
+        # 1) (:index=gene, columns=cells)
         expr_df = read_expression_matrix(expr_path)
         record["Input_Genes_Count"] = int(expr_df.shape[0])
 
-        # 2) 构建序列（Geneformer-aligned mapping）
+        # 2) (Geneformer-aligned mapping)
         sequences, token_id_to_symbol, gene_to_token_id, used_cells, used_genes, pad_id = build_gene_sequences(
             expr_df, TOKEN_DICT, GENE_NAME_ID, config
         )
         record["Mappable_Genes_Count"] = int(used_genes)
 
-        # 3) hidden embeddings（内存）
+        # 3) hidden embeddings()
         emb, final_genes = extract_hidden_embeddings(
             MODEL, sequences, token_id_to_symbol, pad_id, config
         )
         record["Final_Genes_Count"] = int(len(final_genes))
         record["Embedding_Dim"] = int(emb.shape[1])
 
-        # 4) 只输出边文件：{MODEL_NAME}_{DATASET}.tsv
+        # 4) :{MODEL_NAME}_{DATASET}.tsv
         prefix = f"{_safe(MODEL_NAME)}_{_safe(dataset_name)}"
         edge_tsv = out_dir / f"{prefix}.tsv"
 
@@ -817,7 +817,7 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
         record["Total_Edges_Generated"] = int(cosine_info["n_edges"])
         record["Output_TSV_Path"] = str(edge_tsv)
 
-        # 5) 保存关键参数 run_params.json
+        # 5)  run_params.json
         model_hidden = int(getattr(getattr(MODEL, "config", None), "hidden_size", emb.shape[1]))
         run_params = {
             "dataset": dataset_name,
@@ -857,24 +857,24 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
             json.dump(run_params, f, indent=2, ensure_ascii=False)
 
         record["Process_Time_Seconds"] = run_params["processing_time_seconds"]
-        print(f"✅ 完成 | edges: {edge_tsv} | time: {record['Process_Time_Seconds']}s")
+        print(f"[INFO] Done | edges: {edge_tsv} | time: {record['Process_Time_Seconds']}s")
 
     except Exception as e:
         traceback.print_exc()
         record["Process_Status"] = "Failed"
         record["Error_Message"] = str(e)[:300]
-        print(f"❌ 处理失败: {dataset_name} | {record['Error_Message']}")
+        print(f"[ERROR] Failed: {dataset_name} | {record['Error_Message']}")
 
     return record
 
 
-# -------------------------- 批量处理（对齐 IO） --------------------------
+# -------------------------- ( IO) --------------------------
 def main():
     set_seed(CONFIG["SEED"])
 
-    print(f"\n🚀 开始 {MODEL_NAME} Hidden->Edges 批量处理流程")
-    print(f"📥 输入根目录: {INPUT_ROOT}")
-    print(f"📤 输出根目录: {OUTPUT_ROOT}")
+    print(f"\n[INFO] Start {MODEL_NAME} hidden->edges batch")
+    print(f"[INFO] Input root: {INPUT_ROOT}")
+    print(f"[INFO] Output root: {OUTPUT_ROOT}")
 
     input_root = Path(INPUT_ROOT)
     out_root = Path(OUTPUT_ROOT)
@@ -886,36 +886,36 @@ def main():
     for folder in target_folders:
         folder_path = input_root / folder
         if not folder_path.exists():
-            print(f"\n⚠️ 文件夹不存在，跳过: {folder_path}")
+            print(f"\n[WARN] Folder not found, skip: {folder_path}")
             continue
 
         print(f"\n{'='*60}")
-        print(f"📂 处理文件夹: {folder}")
+        print(f"[INFO] Processing folder: {folder}")
 
-        # 对齐你前面规则：CHIP / others 的文件名模式不同
+        # :CHIP / others 
         if folder == "CHIP":
             expr_files = list(folder_path.glob("*_chip_matched-ExpressionData.csv"))
         else:
             expr_files = list(folder_path.glob("*_processed-ExpressionData.csv"))
 
-        print(f"🔍 找到 {len(expr_files)} 个表达矩阵文件")
+        print(f"[INFO] Found {len(expr_files)} expression files")
 
         for expr_file in expr_files:
             rec = process_single_dataset(str(expr_file), folder, CONFIG)
             all_records.append(rec)
 
-    # 汇总
+    # 
     if all_records:
         summary_df = pd.DataFrame(all_records)
         summary_path = out_root / f"{MODEL_NAME}_processing_summary.csv"
         summary_df.to_csv(summary_path, index=False)
         ok = sum(r["Process_Status"] == "Success" for r in all_records)
         fail = len(all_records) - ok
-        print(f"\n📊 汇总记录保存: {summary_path}")
-        print(f"📈 处理统计: 成功 {ok} / 失败 {fail}")
+        print(f"\n[INFO] Summary saved: {summary_path}")
+        print(f"[INFO] Stats: success {ok} / fail {fail}")
 
     print(f"\n{'='*60}")
-    print(f"🎉 所有处理完成！结果保存在: {OUTPUT_ROOT}")
+    print(f"[INFO] All processing complete. Outputs saved in: {OUTPUT_ROOT}")
 
 
 if __name__ == "__main__":

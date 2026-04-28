@@ -1,18 +1,20 @@
+FBEval evaluates predicted GRN edge files against reference networks.
 
-# 文件结构
+Prediction directory example:
 
-预测文件结构:
 /path/to/predictions/
 ├── scgpt_hidden/
 │   ├── scGPT_hESC.tsv
 │   ├── scGPT_hHep.tsv
 │   └── ...
-├── Geneformer_hidden/
-│   └── Geneformer_hESC.tsv
+├── geneformer_hidden/
+│   ├── Geneformer_hESC.tsv
+│   └── ...
 └── ...
 
-真实文件结构:
-/path/to/groundtruth/
+Ground-truth directory example:
+
+/path/to/ground_truth/
 ├── CHIP/
 │   ├── hESC_chip_matched-network.csv
 │   ├── hHep_chip_matched-network.csv
@@ -22,19 +24,22 @@
 └── STRING/
     └── hESC_processed-network.csv
 
+Prediction files should contain the following columns:
 
+- Gene1
+- Gene2
+- EdgeWeight
 
-# 评估代码运行方式
-使用默认参数
+Run AUPR evaluation:
+
 python AUPR.py \
   --pred_root /path/to/predictions \
-  --true_root /path/to/groundtruth \
+  --true_root /path/to/ground_truth \
   --output results/aupr_results.csv
 
+Run EPR evaluation:
 
-
-使用默认参数
 python EPR.py \
   --pred_root /path/to/predictions \
-  --true_root /path/to/groundtruth \
+  --true_root /path/to/ground_truth \
   --output results/epr_results.csv

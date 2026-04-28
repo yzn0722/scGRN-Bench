@@ -19,7 +19,7 @@ from scprint.tasks.grn import GNInfer
 
 
 # ===================
-# CLI 参数（禁止硬编码绝对路径）
+# CLI ()
 # ===================
 import argparse
 
@@ -51,15 +51,15 @@ OUT_PREFIX = ARGS.out_prefix
 SPECIES = ARGS.species
 CELL_TYPE_NAME = ARGS.cell_type_name
 
-# 推断参数（可改）
+# ()
 BATCH_SIZE = int(ARGS.batch_size)
 TOPK = int(ARGS.topk)
 FILTRATION = str(ARGS.filtration)     # "top-k" / "thresh" / "none"
 HEAD_AGG = str(ARGS.head_agg)         # "mean" / "max" / "none"
 PREPROCESS = str(ARGS.preprocess)     # "softmax" / "sinkhorn" / "none"
-FORWARD_MODE = str(ARGS.forward_mode) # 一般保持 none
+FORWARD_MODE = str(ARGS.forward_mode) #  none
 
-# 如果你发现 ckpt 的 gene embedding 行号相对 ckpt_genes 有偏移（比如 embedding 前面还有 special token），可调这个
+#  ckpt  gene embedding  ckpt_genes ( embedding  special token),
 CKPT_GENE_EMB_OFFSET = int(ARGS.ckpt_gene_emb_offset)
 
 
@@ -133,7 +133,7 @@ def map_symbols_to_ensembl(symbols, species_taxon: str, target_ens_set: set, log
         from mygene import MyGeneInfo
     except Exception as e:
         raise RuntimeError(
-            "缺少依赖 mygene。请先运行：pip install mygene\n"
+            " mygene.:pip install mygene\n"
             f"import error: {e}"
         )
 
@@ -187,7 +187,7 @@ def csv_to_adata(csv_path: str, model_gene_set: set, log_path: str):
 
     mapping = map_symbols_to_ensembl(df.index.tolist(), SPECIES, model_gene_set, log_path)
     if len(mapping) == 0:
-        raise RuntimeError("symbol->Ensembl 映射后为 0，请检查 CSV 行名是否为 gene symbol。")
+        raise RuntimeError("symbol->Ensembl  0, CSV  gene symbol.")
 
     df2 = df.loc[list(mapping.keys())].copy()
     df2.index = [mapping[s] for s in df2.index]
@@ -308,13 +308,13 @@ def load_model_with_embedding_alignment_fp32_normal(ckpt_path: str, token_pkl: s
 
     ckpt_genes = hp.get("genes", None)
     if not isinstance(ckpt_genes, (list, tuple)) or len(ckpt_genes) == 0:
-        raise RuntimeError("ckpt hyper_parameters 里没有有效 genes 列表，无法对齐 embedding。")
+        raise RuntimeError("ckpt hyper_parameters  genes , embedding.")
     write_txt(log_path, f"ckpt_genes_len: {len(ckpt_genes)}")
 
     emb_key = "gene_encoder.embeddings.weight"
     ckpt_emb = state.get(emb_key, None)
     if not torch.is_tensor(ckpt_emb):
-        raise RuntimeError(f"state_dict 里找不到 {emb_key}。")
+        raise RuntimeError(f"state_dict  {emb_key}.")
     write_txt(log_path, f"ckpt {emb_key} shape: {tuple(ckpt_emb.shape)}")
 
     sig = inspect.signature(scPrint.__init__)
@@ -339,7 +339,7 @@ def load_model_with_embedding_alignment_fp32_normal(ckpt_path: str, token_pkl: s
     model_sd = model.state_dict()
     mw = model_sd.get(emb_key, None)
     if not torch.is_tensor(mw):
-        raise RuntimeError(f"模型里没有 {emb_key}。")
+        raise RuntimeError(f"Model {emb_key}.")
 
     model_genes = list(getattr(model, "genes", []))
     write_txt(log_path, f"model_genes_len: {len(model_genes)}")
@@ -399,8 +399,8 @@ def load_model_with_embedding_alignment_fp32_normal(ckpt_path: str, token_pkl: s
 @torch.no_grad()
 def infer_grn_fp32_noamp_slice_attn(model, adata, grn_inferer: GNInfer, log_path: str):
     """
-    ✅ 关键修复：attn.get() 是全词表 cache，未参与 token 位置用 NaN 占位
-    => 把 attn 切到 [cell_tokens + used_genes] 再 aggregate
+    :attn.get()  cache, token  NaN 
+    =>  attn  [cell_tokens + used_genes]  aggregate
     """
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -409,9 +409,9 @@ def infer_grn_fp32_noamp_slice_attn(model, adata, grn_inferer: GNInfer, log_path
 
     used_genes = [g for g in adata.var_names if g in gene_to_idx]
     if len(used_genes) == 0:
-        raise RuntimeError("adata.var_names 与 model.genes 没有交集（确认已是 ENSG）。")
+        raise RuntimeError("adata.var_names  model.genes ( ENSG).")
 
-    # 对齐 inferer
+    #  inferer
     grn_inferer.curr_genes = used_genes
     grn_inferer.genes = used_genes
     grn_inferer.num_genes = len(used_genes)
@@ -467,7 +467,7 @@ def infer_grn_fp32_noamp_slice_attn(model, adata, grn_inferer: GNInfer, log_path
     write_txt(log_path, f"attn(raw) nan: {torch.isnan(attn).sum().item()} inf: {torch.isinf(attn).sum().item()}")
 
     # =========================
-    # ✅ 核心：切 attn 到“实际用到的 token”
+    # : attn " token"
     # token 0..n_cell_embs-1: cell special tokens
     # token n_cell_embs + gene_idx: gene token
     # =========================
@@ -486,7 +486,7 @@ def infer_grn_fp32_noamp_slice_attn(model, adata, grn_inferer: GNInfer, log_path
     write_txt(log_path, f"attn(sliced) shape: {tuple(attn.shape)}")
     write_txt(log_path, f"attn(sliced) nan: {torch.isnan(attn).sum().item()} inf: {torch.isinf(attn).sum().item()}")
 
-    # ✅ aggregate 用 sliced attn + used_genes（顺序一致）
+    # aggregate  sliced attn + used_genes()
     adj_all = grn_inferer.aggregate(attn, used_genes)
 
     if grn_inferer.head_agg == "none":
@@ -520,7 +520,7 @@ def main():
 
         used_genes = [g for g in adata.var_names if g in model_gene_set]
         if len(used_genes) == 0:
-            raise RuntimeError("映射后 adata.var_names 与 model.genes 无交集。")
+            raise RuntimeError(" adata.var_names  model.genes .")
         write_txt(log_path, f"final used_genes: {len(used_genes)}")
 
         grn_inferer = GNInfer(

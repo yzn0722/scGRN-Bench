@@ -10,7 +10,7 @@ from datetime import datetime
 import argparse
 from pathlib import Path
 
-# -------------------------- 运行时注入（禁止硬编码） --------------------------
+# -------------------------- Runtime-injected values (no hardcoded paths) --------------------------
 ARGS = None
 INPUT_ROOT = None
 OUTPUT_ROOT = None
@@ -63,21 +63,21 @@ def load_sccello_embedding_df(parent_model_dir: Path) -> pd.DataFrame:
     gene_emb_df_local = gene_emb_df_local.dropna(subset=["Symbol"]).reset_index(drop=True)
     return gene_emb_df_local
 
-# -------------------------- 预加载模型/字典（简化版，保留核心） --------------------------
+# -------------------------- Preload model and dictionaries (simplified version) --------------------------
 def load_sccello_model_and_dict():
-    """预加载scCello模型和基因字典（简化版）"""
-    # 1. 加载scCello模型
+    """Preload the scCello model and gene dictionaries (simplified version)."""
+    # 1. Load the scCello model
     saved_model_path = f"{PARENT_MODEL_DIR}/scCello"
     model = PrototypeContrastiveModel.from_pretrained(saved_model_path, ignore_mismatched_sizes=True)
     model_state_dict = model.state_dict()
     
-    # 提取嵌入层权重（核心）
+    # ()
     if 'embeddings.word_embeddings.weight' not in model_state_dict:
-        raise KeyError("模型中未找到嵌入层权重 'embeddings.word_embeddings.weight'")
+        raise KeyError("Model 'embeddings.word_embeddings.weight'")
     token_emb = model_state_dict['embeddings.word_embeddings.weight']
-    token_emb_filtered = token_emb[:-1, :]  # 移除CLS token
+    token_emb_filtered = token_emb[:-1, :]  # CLS token
     
-    # 2. 加载共用字典
+    # 2. Load shared dictionaries
     dict_paths = f"{PARENT_MODEL_DIR}/Geneformer/dicts"  
     with open(os.path.join(dict_paths, "token_dictionary.pkl"), "rb") as f:
         vocab = pickle.load(f)
@@ -85,23 +85,23 @@ def load_sccello_model_and_dict():
         gene_name_id = pickle.load(f)
     gene_id_name = {v: k for k, v in gene_name_id.items()}
     
-    # 预处理嵌入DataFrame
+    # Prepare the embedding dataframe
     vocab_keys = list(vocab.keys())[:len(token_emb_filtered)]
     gene_emb_df = pd.DataFrame(token_emb_filtered.numpy())
     gene_emb_df["ENSG_ID"] = vocab_keys
     gene_emb_df["Symbol"] = gene_emb_df["ENSG_ID"].apply(lambda x: gene_id_name.get(x, None))
     gene_emb_df = gene_emb_df.dropna(subset=["Symbol"]).reset_index(drop=True)
     
-    print(f"✅ scCello模型加载完成 | 嵌入基因数：{len(gene_emb_df)}")
+    print(f"[INFO] scCello loaded. Embedded genes: {len(gene_emb_df)}")
     return model, gene_emb_df
 
-# 执行预加载
+# 
 model = None
 gene_emb_df = None
 
-# -------------------------- 工具函数（统一提取纯数据集名） --------------------------
+# -------------------------- Utility function for extracting the normalized dataset name --------------------------
 def extract_dataset_name(file_path):
-    """提取纯数据集名（移除CHIP/Non_CHIP/STRING后缀）"""
+    """Extract the normalized dataset name by removing the CHIP/Non_CHIP/STRING suffix."""
     file_basename = os.path.basename(file_path)
     if "_chip_matched-ExpressionData.csv" in file_basename:
         dataset_name = file_basename.split('_chip_matched-ExpressionData.csv')[0]
@@ -111,17 +111,17 @@ def extract_dataset_name(file_path):
         dataset_name = file_basename.split('-ExpressionData.csv')[0]
     return dataset_name
 
-# -------------------------- 单文件对处理函数（输出全量双向边+移除筛选） --------------------------
-def process_single_pair(expr_path, network_path):
-    """处理单个文件对，输出全量双向边，无筛选"""
+# -------------------------- Single-file processing function (export all directed edges without filtering) --------------------------
+def process_single_pair(expr_path):
+    """Process one input file and export all directed edges without filtering."""
     start_time = datetime.now()
-    # 1. 提取纯数据集名称（无数据类型）
+    # 1. Extract the normalized dataset name()
     dataset_name = extract_dataset_name(expr_path)
     print(f"\n=====================================")
-    print(f"🔍 处理数据集：{dataset_name}")
-    print(f"   Expr文件：{expr_path}")
+    print(f"[INFO] Processing dataset: {dataset_name}")
+    print(f"   Expr:{expr_path}")
 
-    # 初始化运行记录
+    # Initialize the run record
     run_record = {
         "Run_Datetime": start_time.strftime("%Y-%m-%d %H:%M:%S"),
         "Model_Name": MODEL_NAME,
@@ -137,39 +137,39 @@ def process_single_pair(expr_path, network_path):
     }
 
     try:
-        # 2. 读取参考基因集
+        # 2. Read the input gene set
         data_df = pd.read_csv(expr_path)
         gene_symbols = data_df.iloc[1:, 0].tolist()
         gene_set_df = pd.DataFrame({"Symbol": gene_symbols}).dropna()
         input_genes_count = len(gene_set_df)
         run_record["Input_Genes_Count"] = input_genes_count
-        print(f"✅ 参考基因集：{input_genes_count}个基因")
+        print(f"[INFO] Input genes: {input_genes_count}")
 
-        # 3. 匹配scCello嵌入
+        # 3. Match scCello embeddings
         gene_emb_filtered = pd.merge(gene_set_df, gene_emb_df, on="Symbol", how="inner")
         matched_genes_count = len(gene_emb_filtered)
         match_rate = round(matched_genes_count / input_genes_count * 100, 2) if input_genes_count > 0 else 0
         run_record["Matched_Genes_Count"] = matched_genes_count
         run_record["Match_Rate(%)"] = match_rate
-        print(f"✅ 匹配基因数：{matched_genes_count} | 匹配率：{match_rate}%")
+        print(f"[INFO] Matched genes: {matched_genes_count} | match rate: {match_rate}%")
 
         if matched_genes_count == 0:
-            raise ValueError("参考基因集与scCello的基因Symbol完全不匹配！")
+            raise ValueError("The input gene set does not overlap with scCello gene symbols.")
 
-        # 4. 计算余弦相似度（输出全量双向边）
+        # 4. Compute cosine similarity and export all directed edges
         gene_names = gene_emb_filtered["Symbol"].tolist()
         embedding_cols = [col for col in gene_emb_filtered.columns if col not in ["Symbol", "ENSG_ID"]]
         embedding_matrix = gene_emb_filtered[embedding_cols].values
 
-        # 计算相似度矩阵（无向，对称）
+        # Compute the symmetric similarity matrix
         similarity_matrix = cosine_similarity(embedding_matrix)
 
-        # 核心修改：遍历所有i≠j，生成全量双向边（仅过滤自环）
+        # Generate all directed edges for every i!=j pair while removing self-loops only.
         edge_weights = []
         n_genes = len(gene_names)
         for i in range(n_genes):
             for j in range(n_genes):
-                if i == j:  # 仅过滤自环，保留所有双向边
+                if i == j:  # Remove self-loops only and keep all directed edges
                     continue
                 edge_weights.append({
                     'Gene1': gene_names[i],
@@ -179,32 +179,32 @@ def process_single_pair(expr_path, network_path):
         
         total_edges = len(edge_weights)
         run_record["Total_Edges_Generated"] = total_edges
-        print(f"✅ 生成全量双向边：{total_edges}条")
+        print(f"[INFO] Generated directed edges: {total_edges}")
 
         if total_edges == 0:
-            raise ValueError("无有效基因对可生成边！")
+            raise ValueError("No valid gene pairs are available for edge generation.")
 
-        # 5. 保存TSV：统一命名为 scCello_数据集.tsv
+        # 5. Save the TSV using the unified naming scheme scCello_<dataset>.tsv
         tsv_filename = f"{MODEL_NAME}_{dataset_name}.tsv"
         tsv_path = os.path.join(OUTPUT_ROOT, tsv_filename)
         
-        # 按EdgeWeight降序排序（保留所有边）
+        # Sort by EdgeWeight in descending order while keeping all edges
         edges_df = pd.DataFrame(edge_weights)
         edges_df = edges_df.sort_values(by="EdgeWeight", ascending=False)
         edges_df.to_csv(tsv_path, sep='\t', index=False)
         run_record["Output_TSV_Path"] = tsv_path
-        print(f"✅ TSV文件已保存：{tsv_path}")
+        print(f"[INFO] TSV saved: {tsv_path}")
 
-        # 6. 补充耗时信息
+        # 6. Record elapsed time
         run_record["Process_Time_Seconds"] = round((datetime.now() - start_time).total_seconds(), 2)
 
     except Exception as e:
-        print(f"❌ 处理失败：{e}")
+        print(f"[ERROR] Processing failed: {e}")
         run_record["Process_Status"] = f"Failed: {str(e)[:100]}"
         import traceback
         traceback.print_exc()
 
-    # 7. 保存简化版运行记录
+    # 7. Save the simplified run record
     record_filename = f"{MODEL_NAME}_run_records.csv"
     record_csv_path = os.path.join(OUTPUT_ROOT, record_filename)
     record_df = pd.DataFrame([run_record])
@@ -214,9 +214,9 @@ def process_single_pair(expr_path, network_path):
     else:
         record_df.to_csv(record_csv_path, mode='w', header=True, index=False)
     
-    print(f"\n📊 处理完成 | 耗时：{run_record['Process_Time_Seconds']}秒")
+    print(f"\n[INFO] Done | elapsed: {run_record['Process_Time_Seconds']}s")
 
-# -------------------------- 批量遍历主函数（简化版） --------------------------
+# -------------------------- Main batch traversal function (simplified version) --------------------------
 def main():
     global ARGS, INPUT_ROOT, OUTPUT_ROOT, PARENT_MODEL_DIR, gene_emb_df
     ARGS = parse_args()
@@ -224,46 +224,38 @@ def main():
     OUTPUT_ROOT = ARGS.output_root
     PARENT_MODEL_DIR = ARGS.parent_model_dir
     os.makedirs(OUTPUT_ROOT, exist_ok=True)
-    print(f"✅ 初始化完成 | 输出根目录：{OUTPUT_ROOT}")
+    print(f"[INFO] Initialization complete | output root: {OUTPUT_ROOT}")
 
     gene_emb_df = load_sccello_embedding_df(parent_model_dir=Path(PARENT_MODEL_DIR))
 
-    print(f"\n🚀 开始scCello批量处理流程（输出全量双向边）")
-    print(f"输入根目录：{INPUT_ROOT}")
-    print(f"输出根目录：{OUTPUT_ROOT}")
+    print("\n[INFO] Start scCello batch processing (directed non-self-loop edges).")
+    print(f"Input root:{INPUT_ROOT}")
+    print(f"Output root:{OUTPUT_ROOT}")
     
-    # 目标文件夹列表
+    # Target folder list
     target_folders = ARGS.folders
     
     for folder in target_folders:
         folder_path = os.path.join(INPUT_ROOT, folder)
         if not os.path.exists(folder_path):
-            print(f"\n⚠️ 文件夹不存在，跳过：{folder_path}")
+            print(f"\n[WARN] Folder not found: {folder_path}; skip.")
             continue
         
         print(f"\n=====================================")
-        print(f"📂 扫描文件夹：{folder}")
+        print(f"[INFO] Scanning folder: {folder}")
         
-        # 找到所有ExpressionData文件
+        # Find all ExpressionData files
         expr_files = [f for f in os.listdir(folder_path) if f.endswith('-ExpressionData.csv')]
         if not expr_files:
-            print(f"⚠️ 未找到ExpressionData.csv文件，跳过")
+            print("[WARN] No ExpressionData.csv files found; skip.")
             continue
         
-        # 处理每个文件对
+        # Process each input file
         for expr_file in expr_files:
             expr_path = os.path.join(folder_path, expr_file)
-            network_file = expr_file.replace('-ExpressionData.csv', '-network.csv')
-            network_path = os.path.join(folder_path, network_file)
-            
-            # 仅检查network文件存在性，不读取/筛选
-            if not os.path.exists(network_path):
-                print(f"⚠️ 缺失Network文件：{network_path} → 跳过{expr_file}")
-                continue
-            
-            process_single_pair(expr_path, network_path)
+            process_single_pair(expr_path)
 
 if __name__ == "__main__":
     main()
     print("\n=====================================")
-    print(f"🎉 所有文件处理完成！结果保存在：{OUTPUT_ROOT}")
+    print(f"[INFO] All files processed. Outputs saved in: {OUTPUT_ROOT}")

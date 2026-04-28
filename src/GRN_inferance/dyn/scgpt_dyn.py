@@ -16,7 +16,7 @@ warnings.filterwarnings("ignore")
 os.environ["KMP_WARNINGS"] = "off"
 
 # =====================================================
-# CLI (禁止硬编码绝对路径)
+# CLI ()
 # =====================================================
 def parse_args():
     p = argparse.ArgumentParser(description="scGPT pseudotime direction-accuracy benchmark (dynamic).")
@@ -75,7 +75,7 @@ def load_datasets_config(args):
 DATASETS = load_datasets_config(ARGS)
 
 # =====================================================
-# 关键参数（核心修改：TOP_PERCENT替代TOPK）
+# (:TOP_PERCENTTOPK)
 # =====================================================
 PT_QUANTILE = float(ARGS.pt_quantile)
 TOP_PERCENT = int(ARGS.top_percent)
@@ -107,9 +107,9 @@ def bin_expr_to_0_50(x, do_log1p=True):
 
 def convert_mouse_to_human_gene(gene_name):
     """
-    小鼠基因名转人类基因名的简单规则：
-    小鼠: 首字母大写其余小写 (e.g., Gapdh)
-    人类: 全部大写 (e.g., GAPDH)
+    :
+    :  (e.g., Gapdh)
+    :  (e.g., GAPDH)
     """
     return gene_name.upper()
 
@@ -161,7 +161,7 @@ def iterative_direction_accuracy(
     update_mask_1d,
     early_mean,
     true_delta,
-    top_idx,  # 每个数据集动态计算的前N%基因索引
+    top_idx,  # DatasetN%
 ):
     device = next(model.parameters()).device
     vals_all = values_tensor.clone()
@@ -190,7 +190,7 @@ def iterative_direction_accuracy(
 
             vals_all[start:end] = vals.detach().cpu()
 
-        # 基于动态计算的前N%基因计算准确率
+        # N%
         pred_mean = vals_all[:, 1:].numpy().mean(axis=0)
         pred_delta = pred_mean - early_mean
         acc = float((np.sign(pred_delta[top_idx]) == np.sign(true_delta[top_idx])).mean())
@@ -215,10 +215,10 @@ def run_dataset(name, cfg, model, vocab, device):
     expr = expr[common]
     pt = pt_df.loc[common, "pt"].to_numpy()
 
-    # 获取原始基因名
+    # 
     genes_original = expr.index.astype(str).tolist()
     
-    # 如果是小鼠数据，尝试转换基因名
+    # ,
     species = cfg.get("species", "human")
     if species == "mouse":
         genes = [convert_mouse_to_human_gene(g) for g in genes_original]
@@ -226,7 +226,7 @@ def run_dataset(name, cfg, model, vocab, device):
     else:
         genes = genes_original
     
-    # 计算vocab匹配率
+    # vocab
     matched = sum(1 for g in genes if g in vocab)
     match_rate = matched / len(genes) * 100
     print(f"  [INFO] Total genes: {len(genes)}")
@@ -247,19 +247,19 @@ def run_dataset(name, cfg, model, vocab, device):
     true_delta = late_mean - early_mean
 
     # ==============================================
-    # 核心修改：动态计算每个数据集的前N%基因（拟时间变化幅度最大）
+    # :DatasetN%(Timestamp)
     # ==============================================
     total_genes = len(true_delta)
-    # 计算前TOP_PERCENT%的基因数，至少保留1个（避免小数据集计算后为0）
+    # TOP_PERCENT%,1(Dataset0)
     top_n = max(int(total_genes * TOP_PERCENT / 100), 1)
-    # 筛选变化幅度最大的前top_n个基因
+    # top_n
     top_idx = np.argsort(np.abs(true_delta))[::-1][:top_n].copy()
     
     print(f"  [INFO] Top-{TOP_PERCENT}% genes selected for evaluation:")
     print(f"         - Total genes in dataset: {total_genes}")
     print(f"         - Actual evaluated genes: {top_n} (Top-{TOP_PERCENT}%)")
 
-    # 检查前N%基因的vocab匹配情况
+    # N%vocab
     top_genes = [genes[i] for i in top_idx]
     top_matched = sum(1 for g in top_genes if g in vocab)
     top_match_rate = top_matched / len(top_genes) * 100
@@ -273,9 +273,9 @@ def run_dataset(name, cfg, model, vocab, device):
     pad_mask = gene_ids_tensor.eq(vocab["<pad>"]).expand(X_in.shape[0], -1)
     values_tensor = torch.tensor(X_in, dtype=torch.float16 if device.type == "cuda" else torch.float32)
 
-    # 迭代阶段更新全部基因（核心逻辑不变）
+    # ()
     update_mask_1d = np.zeros(gene_ids_tensor.shape[1], dtype=bool)
-    update_mask_1d[1:] = True  # 跳过<cls> token，其余所有基因参与迭代
+    update_mask_1d[1:] = True  # <cls> token,
     print(f"  [INFO] Iteration covers ALL {len(genes)} genes (Top-{TOP_PERCENT}% for evaluation only)")
 
     acc_curve = iterative_direction_accuracy(
@@ -291,7 +291,7 @@ def run_dataset(name, cfg, model, vocab, device):
     
     print(f"  [RESULT] Final accuracy (Top-{TOP_PERCENT}% genes): {acc_curve[-1]:.2%}")
     
-    # 返回诊断信息（新增百分比和实际评估数）
+    # ()
     diagnostics = {
         "n_genes": len(genes),
         "n_cells": len(common),
@@ -300,8 +300,8 @@ def run_dataset(name, cfg, model, vocab, device):
         "n_early": int(early.sum()),
         "n_late": int(late.sum()),
         "iter_genes_count": len(genes),
-        "eval_percent": TOP_PERCENT,       # 评估的百分比
-        "eval_genes_count": top_n,         # 实际评估的基因数
+        "eval_percent": TOP_PERCENT,       # 
+        "eval_genes_count": top_n,         # 
     }
     
     return acc_curve, diagnostics
@@ -314,7 +314,7 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     import matplotlib.pyplot as plt
     import matplotlib as mpl
     
-    # Nature风格设置
+    # Nature
     plt.rcParams.update({
         'font.family': 'Arial',
         'font.size': 8,
@@ -335,15 +335,15 @@ def plot_nature_style(all_curves, diagnostics, outdir):
         'savefig.pad_inches': 0.05,
     })
     
-    # Nature常用配色
+    # Nature
     colors = {
-        'hHep': '#E64B35',      # 红色
-        'mDC': '#4DBBD5',       # 青色
-        'mHSC-E': '#00A087',    # 绿色
-        'mHSC-GM': '#3C5488',   # 蓝色
+        'hHep': '#E64B35',      # 
+        'mDC': '#4DBBD5',       # 
+        'mHSC-E': '#00A087',    # 
+        'mHSC-GM': '#3C5488',   # 
     }
     
-    # ==================== Figure 1: 收敛曲线 ====================
+    # ==================== Figure 1:  ====================
     fig, ax = plt.subplots(figsize=(3.5, 2.8))
     
     for name, acc in all_curves.items():
@@ -366,7 +366,7 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     plt.savefig(outdir / "fig1_convergence.png", dpi=300)
     plt.close()
     
-    # ==================== Figure 2: 最终准确率柱状图 ====================
+    # ==================== Figure 2:  ====================
     fig, ax = plt.subplots(figsize=(3.2, 2.8))
     
     names = list(all_curves.keys())
@@ -375,7 +375,7 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     
     bars = ax.bar(range(len(names)), final_acc, color=bar_colors, width=0.6, edgecolor='black', linewidth=0.5)
     
-    # 添加数值标签
+    # 
     for i, (bar, v) in enumerate(zip(bars, final_acc)):
         ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.02,
                 f'{v:.1%}', ha='center', va='bottom', fontsize=7)
@@ -393,7 +393,7 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     plt.savefig(outdir / "fig2_final_accuracy.png", dpi=300)
     plt.close()
     
-    # ==================== Figure 3: 诊断信息 - Vocab匹配率 vs 准确率 ====================
+    # ==================== Figure 3:  - Vocab vs  ====================
     fig, ax = plt.subplots(figsize=(3.2, 2.8))
     
     for name in names:
@@ -416,10 +416,10 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     plt.savefig(outdir / "fig3_vocab_vs_accuracy.png", dpi=300)
     plt.close()
     
-    # ==================== Figure 4: 组合图 (用于论文主图) ====================
+    # ==================== Figure 4:  () ====================
     fig, axes = plt.subplots(1, 2, figsize=(6.5, 2.8))
     
-    # Panel A: 收敛曲线
+    # Panel A: 
     ax = axes[0]
     for name, acc in all_curves.items():
         ax.plot(range(1, GEN_ITERS + 1), acc, 
@@ -436,7 +436,7 @@ def plot_nature_style(all_curves, diagnostics, outdir):
     ax.legend(loc='lower right', fontsize=7)
     ax.text(-0.15, 1.05, 'a', transform=ax.transAxes, fontsize=12, fontweight='bold')
     
-    # Panel B: 柱状图
+    # Panel B: 
     ax = axes[1]
     bars = ax.bar(range(len(names)), final_acc, color=bar_colors, width=0.6, edgecolor='black', linewidth=0.5)
     for i, (bar, v) in enumerate(zip(bars, final_acc)):
@@ -468,7 +468,7 @@ def main():
     
     model, vocab = build_model(MODEL_DIR, device)
     print(f"Vocab size: {len(vocab)}")
-    # 打印运行模式（百分比版）
+    # ()
     print(f"Run mode: Iterate ALL genes, Evaluate Top-{TOP_PERCENT}% genes (largest expression change)")
 
     all_curves = {}
@@ -482,21 +482,21 @@ def main():
     outdir = Path(OUTDIR)
     outdir.mkdir(exist_ok=True, parents=True)
 
-    # 保存结果
+    # Save results
     with open(outdir / "accuracy_curves.json", "w") as f:
         json.dump(all_curves, f, indent=2)
     
     with open(outdir / "diagnostics.json", "w") as f:
         json.dump(all_diagnostics, f, indent=2)
 
-    # 绘制Nature风格图
+    # Nature
     plot_nature_style(all_curves, all_diagnostics, outdir)
     
-    # 打印汇总（适配百分比）
+    # ()
     print("\n" + "="*80)
     print(f"SUMMARY (Top-{TOP_PERCENT}% genes evaluation)")
     print("="*80)
-    # 扩展表格列，显示每个数据集的实际评估基因数
+    # ,Dataset
     print(f"{'Dataset':<12} {'Total Genes':<12} {'Eval Genes':<12} {'Vocab%':<10} {'Top% Vocab%':<12} {'Accuracy':<10}")
     print("-"*80)
     for name in all_curves:

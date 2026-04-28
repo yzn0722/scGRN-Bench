@@ -15,21 +15,21 @@ from transformers import BertModel
 import argparse
 from pathlib import Path
 
-# -------------------------- 运行时注入（禁止硬编码） --------------------------
+# -------------------------- Runtime-injected values (no hardcoded paths) --------------------------
 ARGS = None
 input_root = None
 output_root = None
 gene_emb_df = None
 
-# -------------------------- 预加载模型/字典 --------------------------
+# -------------------------- Preload model and dictionaries --------------------------
 def load_langcell_model_and_dict(parent_model_dir: str):
-    """预加载LangCell模型和基因字典"""
-    # 1. 加载LangCell模型
+    """Preload the LangCell model and gene dictionaries."""
+    # 1. Load the LangCell model
     saved_model_path = f"{parent_model_dir}/LangCell/cell_bert"
     model = BertModel.from_pretrained(saved_model_path, ignore_mismatched_sizes=True)
     token_emb = model.state_dict()['embeddings.word_embeddings.weight']
     
-    # 2. 加载Geneformer字典（复用）
+    # 2. Load Geneformer dictionaries (reused)
     dict_paths = f"{parent_model_dir}/Geneformer/dicts"  
     with open(os.path.join(dict_paths, "token_dictionary.pkl"), "rb") as f:
         vocab = pickle.load(f)
@@ -37,7 +37,7 @@ def load_langcell_model_and_dict(parent_model_dir: str):
         gene_name_id = pickle.load(f)
     gene_id_name = {v: k for k, v in gene_name_id.items()}
     
-    # 3. 预处理LangCell嵌入（移除CLS token）
+    # 3. LangCell(CLS token)
     token_emb_filtered = token_emb[:-1, :]  
     vocab_keys = list(vocab.keys())[:len(token_emb_filtered)]
     
@@ -46,7 +46,7 @@ def load_langcell_model_and_dict(parent_model_dir: str):
     gene_emb_df["Symbol"] = gene_emb_df["ENSG_ID"].apply(lambda x: gene_id_name.get(x, None))
     gene_emb_df = gene_emb_df.dropna(subset=["Symbol"]).reset_index(drop=True)
     
-    print(f"✅ LangCell模型加载完成 | 嵌入基因数：{len(gene_emb_df)}")
+    print(f"[INFO] LangCell loaded. Embedded genes: {len(gene_emb_df)}")
     return model, gene_emb_df
 
 def parse_args():
@@ -57,9 +57,9 @@ def parse_args():
     p.add_argument("--folders", nargs="+", default=["CHIP"], help='Folders to process. Default: ["CHIP"].')
     return p.parse_args()
 
-# -------------------------- 工具函数 --------------------------
+# --------------------------  --------------------------
 def extract_dataset_name(file_path):
-    """提取纯数据集名"""
+    """Extract the normalized dataset name"""
     file_basename = os.path.basename(file_path)
     if "_chip_matched-ExpressionData.csv" in file_basename:
         dataset_name = file_basename.split('_chip_matched-ExpressionData.csv')[0]
@@ -69,47 +69,47 @@ def extract_dataset_name(file_path):
         dataset_name = file_basename.split('-ExpressionData.csv')[0]
     return dataset_name
 
-# -------------------------- 单文件对处理函数（输出全量双向边） --------------------------
-def process_single_pair(expr_path, network_path):
-    # 1. 提取纯数据集名称
+# -------------------------- Single-file processing function (export all directed edges) --------------------------
+def process_single_pair(expr_path):
+    # 1. Extract the normalized dataset name
     dataset_name = extract_dataset_name(expr_path)
     print(f"\n=====================================")
-    print(f"🔍 处理数据集：{dataset_name}")
-    print(f"   Expr文件：{expr_path}")
+    print(f"[INFO] Processing dataset: {dataset_name}")
+    print(f"   Expr:{expr_path}")
 
-    # 2. 读取参考基因集
+    # 2. Read the input gene set
     try:
         data_df = pd.read_csv(expr_path)
         gene_symbols = data_df.iloc[1:, 0].tolist()
         gene_set_df = pd.DataFrame({"Symbol": gene_symbols}).dropna()
         input_genes_count = len(gene_set_df)
-        print(f"✅ 参考基因集：{input_genes_count}个基因")
+        print(f"[INFO] Input genes: {input_genes_count}")
     except Exception as e:
-        print(f"⚠️ 读取Expr文件失败：{e} → 跳过该文件对")
+        print(f"[WARN] Failed to read expression file: {e}; skip this dataset.")
         return
 
-    # 3. 匹配LangCell嵌入
+    # 3. Match LangCell embeddings
     gene_emb_filtered = pd.merge(gene_set_df, gene_emb_df, on="Symbol", how="inner")
     matched_genes_count = len(gene_emb_filtered)
     if matched_genes_count == 0:
-        print(f"⚠️ 基因无匹配 → 跳过")
+        print("[WARN] No matched genes; skip.")
         return
-    print(f"✅ 匹配到的基因：{matched_genes_count}个")
+    print(f"[INFO] Matched genes: {matched_genes_count}")
 
-    # 4. 计算余弦相似度（输出全量双向边）
+    # 4. Compute cosine similarity and export all directed edges
     gene_names = gene_emb_filtered["Symbol"].tolist()
     embedding_cols = [col for col in gene_emb_filtered.columns if col not in ["Symbol", "ENSG_ID"]]
     embedding_matrix = gene_emb_filtered[embedding_cols].values
 
-    # 计算相似度矩阵（无向，对称）
+    # Compute the symmetric similarity matrix
     similarity_matrix = cosine_similarity(embedding_matrix)
 
-    # 核心修改：遍历所有i≠j，生成双向边
+    # Generate directed edges for every i!=j pair
     edge_weights = []
     n_genes = len(gene_names)
     for i in range(n_genes):
         for j in range(n_genes):
-            if i == j:  # 仅过滤自环
+            if i == j:  # 
                 continue
             edge_weights.append({
                 'Gene1': gene_names[i],
@@ -119,38 +119,38 @@ def process_single_pair(expr_path, network_path):
     
     total_edges = len(edge_weights)
     if total_edges == 0:
-        print(f"⚠️ 无有效基因对 → 跳过保存")
+        print("[WARN] No valid gene pairs; skip saving.")
         return
 
-    # 5. 保存TSV：模型_数据集.tsv
+    # 5. Save the TSV as <model>_<dataset>.tsv
     tsv_filename = f"LangCell_{dataset_name}.tsv"
     tsv_path = os.path.join(output_root, tsv_filename)
     
-    # 按EdgeWeight降序排序（保留所有边）
+    # Sort by EdgeWeight in descending order while keeping all edges
     edges_df = pd.DataFrame(edge_weights)
     edges_df = edges_df.sort_values(by="EdgeWeight", ascending=False)
     edges_df.to_csv(tsv_path, sep='\t', index=False)
     
-    # 统计信息
+    # 
     avg_weight = np.mean([ew['EdgeWeight'] for ew in edge_weights])
-    print(f"\n📈 结果统计：")
-    print(f"   总生成边（双向）：{total_edges} | 平均权重：{avg_weight:.4f}")
-    print(f"✅ TSV已保存：{tsv_path}")
+    print("\n[INFO] Result summary")
+    print(f"   Total directed edges: {total_edges} | Mean weight: {avg_weight:.4f}")
+    print(f"[INFO] TSV saved: {tsv_path}")
 
-    # 6. 记录运行信息
+    # 6. 
     record = {
-        "时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "模型": "LangCell",
-        "数据集": dataset_name,
-        "输入基因数": input_genes_count,
-        "匹配基因数": matched_genes_count,
-        "总双向边数": total_edges,
-        "TSV路径": tsv_path
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Model": "LangCell",
+        "Dataset": dataset_name,
+        "Input gene count": input_genes_count,
+        "Matched gene count": matched_genes_count,
+        "Total directed edge count": total_edges,
+        "TSV path": tsv_path
     }
-    record_csv = os.path.join(output_root, "LangCell运行记录.csv")
+    record_csv = os.path.join(output_root, "LangCellrun_records.csv")
     pd.DataFrame([record]).to_csv(record_csv, mode='a', header=not os.path.exists(record_csv), index=False)
 
-# -------------------------- 批量遍历主函数 --------------------------
+# -------------------------- Main batch traversal function --------------------------
 def main():
     global ARGS, input_root, output_root, gene_emb_df
     ARGS = parse_args()
@@ -160,37 +160,30 @@ def main():
 
     _, gene_emb_df = load_langcell_model_and_dict(parent_model_dir=ARGS.parent_model_dir)
 
-    print(f"\n🚀 开始LangCell批量处理流程（输出全量双向边）")
-    print(f"输入根目录：{input_root}")
-    print(f"输出根目录：{output_root}")
+    print("\n[INFO] Start LangCell batch processing (directed non-self-loop edges).")
+    print(f"Input root:{input_root}")
+    print(f"Output root:{output_root}")
     
     target_folders = ARGS.folders
     for folder in target_folders:
         folder_path = os.path.join(input_root, folder)
         if not os.path.exists(folder_path):
-            print(f"\n⚠️ 文件夹不存在，跳过：{folder_path}")
+            print(f"\n[WARN] Folder not found: {folder_path}; skip.")
             continue
         
         print(f"\n=====================================")
-        print(f"📂 扫描文件夹：{folder}")
+        print(f"[INFO] Scanning folder: {folder}")
         
         expr_files = [f for f in os.listdir(folder_path) if f.endswith('-ExpressionData.csv')]
         if not expr_files:
-            print(f"⚠️ 未找到ExpressionData.csv文件，跳过")
+            print("[WARN] No ExpressionData.csv files found; skip.")
             continue
         
         for expr_file in expr_files:
             expr_path = os.path.join(folder_path, expr_file)
-            network_file = expr_file.replace('-ExpressionData.csv', '-network.csv')
-            network_path = os.path.join(folder_path, network_file)
-            
-            if not os.path.exists(network_path):
-                print(f"⚠️ 缺失Network文件：{network_path} → 跳过{expr_file}")
-                continue
-            
-            process_single_pair(expr_path, network_path)
+            process_single_pair(expr_path)
 
 if __name__ == "__main__":
     main()
     print("\n=====================================")
-    print(f"🎉 所有文件处理完成！结果保存在：{output_root}")
+    print(f"[INFO] All files processed. Outputs saved in: {output_root}")

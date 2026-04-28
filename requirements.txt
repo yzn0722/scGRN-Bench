@@ -1,3 +1,22 @@
+# =============================================================================
+# scGRN-Bench Python requirements
+# =============================================================================
+#
+# Notes
+# - This file lists pip-installable Python packages only.
+# - Model checkpoints (large files) are NOT installed via pip. See the
+#   "Model checkpoints (large files)" section below.
+# - Do not pin versions here unless you have a strict reproducibility need.
+#
+# Recommended Python: 3.9+
+#
+# Install:
+#   python -m pip install -r requirements.txt
+#
+
+# -----------------------------------------------------------------------------
+# Core (used by most scripts)
+# -----------------------------------------------------------------------------
 numpy
 pandas
 scikit-learn
@@ -8,19 +27,53 @@ scipy
 tqdm
 pyyaml
 
-# Optional / model-specific (install only if needed):
+# -----------------------------------------------------------------------------
+# Optional (install only if you run the corresponding scripts/models)
+# -----------------------------------------------------------------------------
+# Deep learning stack
 # torch
+transformers
+datasets
+
+# Single-cell utilities
 # scanpy
+anndata
+
+# scGPT python package (only needed if you run scGPT scripts)
 # scgpt
 
-# Optional / local packages used by some scripts:
-# - scPRINT (used by `src/extract_model/attention/scPRINT.py`)
-#   pip install scprint
+# scPRINT utilities used by `src/extract_model/attention/scPRINT.py`
 scprint
 mygene
 
-# Optional / local tarball (user-provided):
-# If you need your local singlecell package, install from:
-#   /mnt/10T/yzn/singlecell.tar.gz
-# You can enable the line below (requires the tarball to exist on the machine):
-# singlecell @ file:///mnt/10T/yzn/singlecell.tar.gz
+# -----------------------------------------------------------------------------
+# Local / external assets (NOT pip packages)
+# -----------------------------------------------------------------------------
+#
+# 1) singlecell.tar.gz (conda-packed environment)
+# If you have a conda-packed environment tarball named `singlecell.tar.gz`,
+# you can unpack it into your local conda envs directory. Example:
+#
+#   mkdir -p "${CONDA_PREFIX%/envs/*}/envs/singlecell"
+#   tar -xzvf singlecell.tar.gz -C "${CONDA_PREFIX%/envs/*}/envs/singlecell"
+#   conda activate singlecell
+#
+# Alternatively, you can use your own environment and install the Python
+# dependencies you need.
+#
+# 2) Model checkpoints (large files)
+# These checkpoints can be many GB and should be placed under this repository's
+# `data/` directory so the batch script can find them by default:
+#
+#   scGRN-Bench/data/
+#   ├── model_weights/            (Geneformer/LangCell/scCello weights and dicts)
+#   ├── scgpt/scgpt_human/        (scGPT checkpoint + vocab)
+#   └── scfoundation/             (scFoundation checkpoint + vocab)
+#
+# Known checkpoint/source links (examples):
+# - Zenodo record (project checkpoints): https://zenodo.org/records/17054467
+# - Geneformer: https://huggingface.co/ctheodoris/Geneformer
+# - scGPT: https://github.com/bowang-lab/scGPT
+# - scFoundation: https://github.com/biomap-research/scFoundation
+# - LangCell: https://github.com/PharMolix/LangCell
+# - scPRINT: https://github.com/cantinilab/scPRINT

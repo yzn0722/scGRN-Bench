@@ -5,16 +5,16 @@
 """
 LangCell hidden-state gene embeddings -> cosine edges (Geneformer-aligned, batch)
 
-✅ 对齐 Geneformer 的基因映射方式：
+ Geneformer :
    Symbol -> gene_name_id_dict.pkl -> ENSG -> token_dictionary.pkl
 
-✅ 每个数据集只输出 1 个 TSV 边文件：
-   {MODEL_NAME}_{DATASET}.tsv   （列：Gene1, Gene2, EdgeWeight；有向边；去自环）
+Dataset 1  TSV :
+   {MODEL_NAME}_{DATASET}.tsv   (:Gene1, Gene2, EdgeWeight;;)
 
-✅ 同时保存关键参数：
+:
    run_params.json
 
-❌ 不输出 embedding 文件（embedding 仅在内存中用于计算边）
+ embedding (embedding )
 """
 
 import os
@@ -40,31 +40,31 @@ from transformers import BertModel
 # CONFIG
 # =============================================================================
 CONFIG = {
-    # 批量处理 IO
+    #  IO
     "INPUT_ROOT": "",
     "OUTPUT_ROOT": "",
-    "TARGET_FOLDERS": ["CHIP"],   # 例如 ["CHIP","Non_CHIP","STRING"]；或设为 None 表示遍历 INPUT_ROOT 下所有子文件夹
+    "TARGET_FOLDERS": ["CHIP"],   #  ["CHIP","Non_CHIP","STRING"]; None  INPUT_ROOT 
 
-    # 模型/字典
+    # Model/
     "DICT_PATH": "",
     "LANGCELL_MODEL_PATH": "",
-    "MODEL_NAME": "LangCell",     # 输出文件名前缀（模型名）
+    "MODEL_NAME": "LangCell",     # (Model)
 
-    # 序列构建（建议 512/512 适配你 ~1000 gene 的情况；要和 Geneformer 严格对齐可改回 256/256）
+    # ( 512/512  ~1000 gene ; Geneformer  256/256)
     "SEQ_TOPK_GENES": 512,
     "MAX_SEQ_LEN": 512,
     "USE_LOG1P": False,
 
     # hidden extraction
-    "HIDDEN_LAYER": -1,     # -1 = 最后一层
-    "N_CELLS": None,        # None = 全部细胞
+    "HIDDEN_LAYER": -1,     # -1 = 
+    "N_CELLS": None,        # None = 
     "BATCH_SIZE": 16,
 
-    # 余弦边输出
-    "SAVE_ALL_EDGES": True,   # True => 输出所有 i!=j 的有向边（流式写，不存 NxN）
-    "TOPK_PER_GENE": 1000,    # SAVE_ALL_EDGES=False 时启用：每个 Gene1 输出 topK
+    # 
+    "SAVE_ALL_EDGES": True,   # True =>  i!=j (, NxN)
+    "TOPK_PER_GENE": 1000,    # SAVE_ALL_EDGES=False : Gene1  topK
 
-    # 其他
+    # 
     "SEED": 42,
 }
 
@@ -163,7 +163,7 @@ def load_gene_name_id_dict(dict_path: str) -> dict:
     if not os.path.exists(p):
         raise FileNotFoundError(f"Missing {p}")
     with open(p, "rb") as f:
-        gene_name_id = pickle.load(f)  # Symbol -> ENSG (通常是 str)
+        gene_name_id = pickle.load(f)  # Symbol -> ENSG ( str)
     print(f"Gene name dictionary loaded: {len(gene_name_id)} symbols")
     return gene_name_id
 
@@ -178,8 +178,8 @@ def get_pad_id(token_to_id: dict) -> int:
 def match_genes_to_tokens_like_geneformer(symbols, token_to_id, gene_name_id_dict):
     """
     Geneformer-aligned mapping:
-      1) 如果 gene 名本身就是 token key（如 ENSG），直接用
-      2) 否则 Symbol -> ENSG via gene_name_id_dict，再 ENSG -> token_dictionary
+      1)  gene  token key( ENSG),
+      2)  Symbol -> ENSG via gene_name_id_dict, ENSG -> token_dictionary
     """
     gene_to_token_id = {}
     missing = 0
@@ -241,7 +241,7 @@ def build_sequences(expr_df, gene_to_token_id, topk, max_len, n_cells, use_log1p
 
 def compute_and_save_all_cosine_edges_stream(genes, emb, out_path):
     """
-    输出所有 i!=j 的有向边（流式，不存 NxN），列：Gene1 Gene2 EdgeWeight
+     i!=j (, NxN),:Gene1 Gene2 EdgeWeight
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -268,7 +268,7 @@ def compute_and_save_all_cosine_edges_stream(genes, emb, out_path):
 
 def compute_and_save_topk_cosine_edges(genes, emb, out_path, topk: int):
     """
-    输出每个 Gene1 的 topK 相似边（有向），列：Gene1 Gene2 EdgeWeight
+     Gene1  topK (),:Gene1 Gene2 EdgeWeight
     """
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
@@ -323,8 +323,8 @@ def process_single_dataset(expr_file_path: str, config: dict):
 
     try:
         print(f"\n{'='*60}")
-        print(f"🔍 Processing: {dataset_name} (folder: {folder_name})")
-        print(f"📂 Input: {expr_file_path}")
+        print(f"[INFO] Processing: {dataset_name} (folder: {folder_name})")
+        print(f"[INFO] Input: {expr_file_path}")
 
         # 1) load expression
         expr_df = read_expression_matrix(expr_file_path)
@@ -428,7 +428,7 @@ def process_single_dataset(expr_file_path: str, config: dict):
             assert dim == int(model.config.hidden_size), \
                 f"Embedding dim {dim} != hidden_size {model.config.hidden_size}"
         except Exception:
-            print("⚠️ Warning: embedding dim != model hidden_size (check model/config)")
+            print("[WARN] Embedding dim != model hidden_size (check model/config)")
 
         print(f"Final (in-memory) embeddings: {len(genes)} genes x {dim} dim")
         print(f"Used cells: {used_cells}")
@@ -446,7 +446,7 @@ def process_single_dataset(expr_file_path: str, config: dict):
             )
 
         record["Total_Edges_Generated"] = int(cosine_info["n_edges"])
-        print(f"✅ Saved edges TSV: {edge_tsv}")
+        print(f"[INFO] Saved edges TSV: {edge_tsv}")
 
         # 9) save run params
         run_params = {
@@ -499,13 +499,13 @@ def process_single_dataset(expr_file_path: str, config: dict):
             json.dump(run_params, f, indent=2, ensure_ascii=False)
 
         record["Process_Time_Seconds"] = run_params["processing_time_seconds"]
-        print(f"✅ Done | time: {record['Process_Time_Seconds']}s")
+        print(f"[INFO] Done | time: {record['Process_Time_Seconds']}s")
 
     except Exception as e:
         traceback.print_exc()
         record["Process_Status"] = "Failed"
         record["Error_Message"] = str(e)[:300]
-        print(f"❌ Failed: {dataset_name} | {record['Error_Message']}")
+        print(f"[ERROR] Failed: {dataset_name} | {record['Error_Message']}")
 
     return record
 
@@ -519,26 +519,26 @@ def main():
     output_root = Path(CONFIG["OUTPUT_ROOT"])
     output_root.mkdir(parents=True, exist_ok=True)
 
-    print("\n🚀 LangCell batch (Geneformer-aligned) start")
-    print(f"📥 INPUT_ROOT : {input_root}")
-    print(f"📤 OUTPUT_ROOT: {output_root}")
+    print("\n[INFO] LangCell batch (Geneformer-aligned) start")
+    print(f"[INFO] INPUT_ROOT : {input_root}")
+    print(f"[INFO] OUTPUT_ROOT: {output_root}")
 
     # folders
     if CONFIG["TARGET_FOLDERS"] is None:
         folders = sorted([p.name for p in input_root.iterdir() if p.is_dir()])
     else:
         folders = CONFIG["TARGET_FOLDERS"]
-    print(f"⚙️  Folders: {folders}")
+    print(f"[INFO] Folders: {folders}")
 
     ok, fail = 0, 0
 
     for folder in folders:
         folder_path = input_root / folder
         if not folder_path.exists():
-            print(f"\n⚠️ Missing folder, skip: {folder_path}")
+            print(f"\n[WARN] Missing folder, skip: {folder_path}")
             continue
 
-        print(f"\n{'='*60}\n📂 Folder: {folder}")
+        print(f"\n{'='*60}\n[INFO] Folder: {folder}")
 
         # keep your original filename patterns
         if folder == "CHIP":
@@ -546,7 +546,7 @@ def main():
         else:
             expr_files = list(folder_path.glob("*_processed-ExpressionData.csv"))
 
-        print(f"🔍 Found {len(expr_files)} expression files")
+        print(f"[INFO] Found {len(expr_files)} expression files")
 
         for expr_file in expr_files:
             rec = process_single_dataset(str(expr_file), CONFIG)
@@ -556,8 +556,8 @@ def main():
                 fail += 1
 
     print(f"\n{'='*60}")
-    print(f"📈 Done. success={ok}, fail={fail}")
-    print(f"🎉 Output at: {output_root}")
+    print(f"[INFO] Done. success={ok}, fail={fail}")
+    print(f"[INFO] Output at: {output_root}")
 
 
 if __name__ == "__main__":

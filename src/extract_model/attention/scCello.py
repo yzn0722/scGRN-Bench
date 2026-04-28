@@ -1,8 +1,8 @@
 
 
 """
-scCello Attention提取 - 批量处理版（支持CHIP/Non_CHIP+总参数CSV）
-统一输出目录，所有数据集参数合并到一个CSV文件
+scCello Attention - (CHIP/Non_CHIP+CSV)
+,DatasetCSV
 """
 
 import os
@@ -22,7 +22,7 @@ from datasets import load_from_disk
 from geneformer import TranscriptomeTokenizer
 import argparse
 
-# ==================== CLI 参数 ====================
+# ==================== CLI  ====================
 def parse_args():
     p = argparse.ArgumentParser(description="scCello attention extraction for one dataset.")
     p.add_argument("data_type", choices=["CHIP", "Non_CHIP", "STRING"])
@@ -41,33 +41,33 @@ def parse_args():
 ARGS = parse_args()
 data_type = ARGS.data_type
 dataset = ARGS.dataset
-MODEL_NAME = "scCello"   # 模型名称，用于输出命名
+MODEL_NAME = "scCello"   # Model,
 
 
-# ==================== 路径配置（根据类型动态调整）====================
-# 根输入目录
+# ==================== ()====================
+# 
 INPUT_ROOT = ARGS.input_root
-# 根输出目录
+# 
 OUTPUT_ROOT = ARGS.output_root
-# 按类型分输出子目录（保持整洁）
+# ()
 TYPE_OUTPUT_DIR = f"{OUTPUT_ROOT}/{data_type}"
 
-# 创建输出目录
+# Create the output directory
 os.makedirs(TYPE_OUTPUT_DIR, exist_ok=True)
 
-# 临时文件路径（根目录下，避免冲突）
+# (,)
 TEMP_LOOM_PATH = f"{OUTPUT_ROOT}/temp_{data_type}_{dataset}.loom"
 TEMP_DATASET_DIR = f"{OUTPUT_ROOT}/temp_{data_type}_{dataset}.dataset"
 
-# 模型/字典路径（固定）
+# Model/()
 SCCELLO_BASE = ARGS.model_path
 MODEL_PATH = SCCELLO_BASE
 DICT_DIR = ARGS.dict_dir
 
-# 总参数CSV文件（所有数据集共用一个）
+# CSV(Dataset)
 ALL_PARAMS_CSV = f"{OUTPUT_ROOT}/{MODEL_NAME}-all-params.csv"
 
-# 根据类型确定输入文件后缀和路径
+# 
 if data_type == "CHIP":
     file_suffix = "_chip_matched"
     input_subdir = "CHIP"
@@ -78,24 +78,24 @@ elif data_type == "STRING":
     file_suffix = "_processed"
     input_subdir = "STRING"
 else:
-    raise ValueError(f"不支持的数据类型: {data_type}（仅支持CHIP/Non_CHIP/STRING）")
+    raise ValueError(f": {data_type}(CHIP/Non_CHIP/STRING)")
 
-# 输入文件路径（动态拼接）
+# ()
 INPUT_CSV = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv"
 LABEL_CSV = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
-# 输出文件路径（类型+数据集命名）
+# (+Dataset)
 TSV_PATH = f"{TYPE_OUTPUT_DIR}/{MODEL_NAME}-{data_type}-{dataset}-gene_attention_edges.tsv"
 
 
-# ==================== 固定参数 ====================
+# ====================  ====================
 BATCH_SIZE = int(ARGS.batch_size)
 NUM_WORKERS = int(ARGS.num_workers)
 TARGET_LAYER = int(ARGS.target_layer)
 ADD_CLS = True
 
 
-# ==================== 导入模块 ====================
+# ====================  ====================
 SCCELLO_BASE_SRC = str(Path(ARGS.sccello_repo_dir) / "sccello")
 SCCELLO_SRC = os.path.join(SCCELLO_BASE_SRC, "src")
 SC_FOUNDATION_BASE = ARGS.sccello_repo_dir
@@ -159,7 +159,7 @@ class SimpleCollator:
         return batch
 
 
-# ==================== reverse_permute函数 ====================
+# ==================== reverse_permute ====================
 def reverse_permute(tensor, indices):
     device = tensor.device
     if indices.device != device:
@@ -183,58 +183,58 @@ def reverse_permute(tensor, indices):
         raise ValueError(f"Unsupported tensor dimension: {tensor.dim()}")
 
 
-# ==================== 记录运行时间（开始）====================
+# ==================== Timestamp()====================
 start_time = time.time()
 
 
-# ==================== 加载Label文件（仅用于最终筛选）====================
+# ==================== Label()====================
 print("="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 加载Label文件")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] Label")
 print("="*80)
 
 if not os.path.exists(LABEL_CSV):
-    raise FileNotFoundError(f"Label文件不存在: {LABEL_CSV}")
+    raise FileNotFoundError(f"Labeldoes not exist: {LABEL_CSV}")
 
 label_df = pd.read_csv(LABEL_CSV)
 label_gene1 = set(label_df['Gene1'].unique()) if 'Gene1' in label_df.columns else set()
-print(f"✓ Label文件路径: {LABEL_CSV}")
-print(f"✓ Label文件形状: {label_df.shape}")
-print(f"✓ Label中独特Gene1数量: {len(label_gene1)}")
-print(f"✓ 输出目录: {TYPE_OUTPUT_DIR}")
-print(f"✓ 总参数文件: {ALL_PARAMS_CSV}")
+print(f"✓ Label: {LABEL_CSV}")
+print(f"✓ Label: {label_df.shape}")
+print(f"✓ LabelGene1: {len(label_gene1)}")
+print(f"✓ : {TYPE_OUTPUT_DIR}")
+print(f"✓ : {ALL_PARAMS_CSV}")
 
 
-# ==================== 数据预处理（动态适配类型+数据集）====================
+# ==================== (+Dataset)====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 数据预处理")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] ")
 print("="*80)
 
 if not os.path.exists(INPUT_CSV):
-    raise FileNotFoundError(f"表达数据文件不存在: {INPUT_CSV}")
+    raise FileNotFoundError(f"does not exist: {INPUT_CSV}")
 
-# 读取原始数据并记录形状
+# 
 adata = sc.read_csv(INPUT_CSV)
-adata_original_shape = adata.shape  # 记录转置前形状
-print(f"✓ 表达数据路径: {INPUT_CSV}")
-print(f"✓ 原始数据形状（转置前）: {adata_original_shape}")
+adata_original_shape = adata.shape  # 
+print(f"✓ : {INPUT_CSV}")
+print(f"✓ (): {adata_original_shape}")
 
-# 转置为细胞×基因
+# ×
 adata = adata.T
 adata_transposed_shape = adata.shape
-print(f"✓ 转置后数据形状（细胞×基因）: {adata_transposed_shape}")
+print(f"✓ (×): {adata_transposed_shape}")
 
-# 提取基因名
+# 
 gene_symbols = adata.var_names.tolist()
-print(f"✓ 转置后总基因数: {len(gene_symbols)}")
+print(f"✓ : {len(gene_symbols)}")
 
-# 加载基因字典并匹配
+# 
 with open(f"{DICT_DIR}/gene_name_id_dict.pkl", "rb") as f:
     gene_name_dict = pickle.load(f)
 valid_mask = [gene in gene_name_dict for gene in gene_symbols]
 valid_gene_count = sum(valid_mask)
-print(f"✓ 基因字典匹配数: {valid_gene_count}/{len(gene_symbols)} ({valid_gene_count/len(gene_symbols)*100:.1f}%)")
+print(f"✓ : {valid_gene_count}/{len(gene_symbols)} ({valid_gene_count/len(gene_symbols)*100:.1f}%)")
 
-# 过滤有效基因
+# 
 adata = adata[:, valid_mask]
 final_gene_symbols = [g for g, v in zip(gene_symbols, valid_mask) if v]
 ensembl_ids = [gene_name_dict[gene] for gene in final_gene_symbols]
@@ -242,22 +242,22 @@ adata.var['gene_name'] = final_gene_symbols
 adata.var['ensembl_id'] = ensembl_ids
 adata.var_names = final_gene_symbols
 
-# 质控前记录
+# 
 adata_pre_qc_n_obs = adata.n_obs
 adata_pre_qc_n_vars = adata.n_vars
-print(f"\n✓ 质控前细胞数: {adata_pre_qc_n_obs}, 基因数: {adata_pre_qc_n_vars}")
+print(f"\n✓ : {adata_pre_qc_n_obs}, : {adata_pre_qc_n_vars}")
 
-# 质控
+# 
 sc.pp.filter_cells(adata, min_genes=200)
 sc.pp.filter_genes(adata, min_cells=3)
-print(f"✓ 质控后细胞数: {adata.n_obs}, 基因数: {adata.n_vars}")
+print(f"✓ : {adata.n_obs}, : {adata.n_vars}")
 
-# 标准化
+# 
 adata.obs['n_counts'] = adata.X.sum(axis=1).A1 if scipy.sparse.issparse(adata.X) else adata.X.sum(axis=1)
 sc.pp.normalize_total(adata, target_sum=1e4)
 sc.pp.log1p(adata)
 
-# 补充细胞属性
+# 
 if 'cell_type' not in adata.obs.columns:
     adata.obs['cell_type'] = 'unknown'
 adata.obs['adata_order'] = range(adata.n_obs)
@@ -268,9 +268,9 @@ print("\n" + "="*80)
 print(f"[{MODEL_NAME}-{data_type}-{dataset}] Tokenization")
 print("="*80)
 
-# 保存临时loom文件
+# loom
 adata.write_loom(TEMP_LOOM_PATH, write_obsm_varm=False)
-print(f"✓ 临时loom文件: {TEMP_LOOM_PATH}")
+print(f"✓ loom: {TEMP_LOOM_PATH}")
 
 tokenizer = TranscriptomeTokenizer(
     custom_attr_name_dict={"cell_type": "cell_type", "adata_order": "adata_order"},
@@ -288,10 +288,10 @@ tokenizer.tokenize_data(
 )
 
 tokenized_dataset = load_from_disk(TEMP_DATASET_DIR)
-print(f"✓ 临时数据集目录: {TEMP_DATASET_DIR}")
-print(f"✓ Tokenization后数据集大小: {len(tokenized_dataset)}")
+print(f"✓ Dataset: {TEMP_DATASET_DIR}")
+print(f"✓ TokenizationDataset: {len(tokenized_dataset)}")
 
-# 处理数据集列
+# Dataset
 types = list(set(tokenized_dataset['cell_type']))
 type2num = dict([(type_name, i) for i, type_name in enumerate(types)])
 def add_labels_and_indices(example, idx):
@@ -316,7 +316,7 @@ def convert_to_lists(example):
 tokenized_dataset = tokenized_dataset.map(convert_to_lists, num_proc=1)
 
 
-# ==================== 构建基因映射 ====================
+# ====================  ====================
 with open(f"{DICT_DIR}/token_dictionary.pkl", "rb") as f:
     vocab = pickle.load(f)
 with open(f"{DICT_DIR}/gene_name_id_dict.pkl", "rb") as f:
@@ -332,43 +332,43 @@ coding_miRNA_loc = np.where([genelist_dict.get(i, False) for i in adata.var["ens
 ori_gene_ids = np.array([vocab[g] for g in adata.var["ensembl_id"][coding_miRNA_loc]])
 ori_gene_names = [id2name.get(i, "") for i in adata.var["ensembl_id"][coding_miRNA_loc]]
 n_genes = len(ori_gene_names)
-print(f"\n✓ 最终用于模型的基因数: {n_genes}")
+print(f"\n✓ Model: {n_genes}")
 
 token_id_to_gene_name = {}
 for ensembl_id, gene_name in zip(adata.var["ensembl_id"][coding_miRNA_loc], ori_gene_names):
     token_id = vocab.get(ensembl_id)
     if token_id is not None:
         token_id_to_gene_name[token_id] = gene_name
-print(f"✓ token-基因名映射数: {len(token_id_to_gene_name)}")
+print(f"✓ token-: {len(token_id_to_gene_name)}")
 
 
-# ==================== 加载模型 ====================
+# ==================== Model ====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 加载模型")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] Model")
 print("="*80)
 
 model = scCelloModel.from_pretrained(MODEL_PATH, output_hidden_states=True)
 we_before = model.bert.embeddings.word_embeddings.weight
-print(f"✓ 初始embedding权重范围: [{we_before.min().item():.4f}, {we_before.max().item():.4f}]")
+print(f"✓ embeddingWeight range: [{we_before.min().item():.4f}, {we_before.max().item():.4f}]")
 
-# 手动加载权重（如果需要）
+# ()
 if we_before.abs().max().item() == 0:
     weight_path = os.path.join(MODEL_PATH, "pytorch_model.bin")
     if not os.path.exists(weight_path):
-        raise FileNotFoundError(f"模型权重文件不存在: {weight_path}")
+        raise FileNotFoundError(f"Modeldoes not exist: {weight_path}")
     state_dict = torch.load(weight_path, map_location='cpu')
     model.load_state_dict(state_dict, strict=False)
     we_after = model.bert.embeddings.word_embeddings.weight
-    print(f"✓ 加载后embedding权重范围: [{we_after.min().item():.4f}, {we_after.max().item():.4f}]")
+    print(f"✓ embeddingWeight range: [{we_after.min().item():.4f}, {we_after.max().item():.4f}]")
 
-# 设备配置
+# 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
 model.eval()
-print(f"✓ 模型加载到设备: {device}")
+print(f"✓ Model: {device}")
 
 
-# ==================== 创建DataLoader ====================
+# ==================== DataLoader ====================
 tokenized_dataset.set_format(type=None)
 collator = SimpleCollator(add_cls=ADD_CLS)
 dataloader = DataLoader(
@@ -378,12 +378,12 @@ dataloader = DataLoader(
     shuffle=False,
     num_workers=0
 )
-print(f"\n✓ DataLoader批次数量: {len(dataloader)}")
+print(f"\n✓ DataLoader: {len(dataloader)}")
 
 
-# ==================== 提取Attention ====================
+# ==================== Attention ====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 提取Attention")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] Attention")
 print("="*80)
 
 gene_pair_attention = defaultdict(lambda: {'sum': 0.0, 'count': 0})
@@ -394,7 +394,7 @@ with torch.no_grad():
         cell_input_ids = batch_data['input_ids'].to(device)
         cell_atts = batch_data['attention_mask'].to(device)
         
-        # 前向传播
+        # 
         cell_output = model.bert(
             input_ids=cell_input_ids,
             attention_mask=cell_atts,
@@ -403,7 +403,7 @@ with torch.no_grad():
         attn_scores = cell_output.attentions[TARGET_LAYER]
         num_heads = attn_scores.size(1)
         
-        # 去除CLS
+        # CLS
         sorted_indices = batch_data["sorted_indices"].to(device)
         input_ids = batch_data["input_ids"].to(device)
         if ADD_CLS:
@@ -423,21 +423,21 @@ with torch.no_grad():
         rank = torch.argsort(order, dim=1)
         attn_scores = (rank.reshape((-1, num_heads, M, M)) / M).permute(0, 1, 3, 2)
         
-        # 平均heads
+        # heads
         attn_scores = attn_scores.mean(1)
         
-        # 显示Attention示例
+        # Attention
         if not attention_debug_shown and batch_idx == 0:
-            print(f"\n✓ Attention示例（第1批第1细胞）:")
-            print(f"  形状: {attn_scores.shape}, 范围: [{attn_scores.min().item():.6f}, {attn_scores.max().item():.6f}]")
-            print(f"  前5×5矩阵:\n{attn_scores[0].cpu().numpy()[:5, :5]}")
+            print(f"\n✓ Attention(11):")
+            print(f"  : {attn_scores.shape}, : [{attn_scores.min().item():.6f}, {attn_scores.max().item():.6f}]")
+            print(f"  5×5:\n{attn_scores[0].cpu().numpy()[:5, :5]}")
             attention_debug_shown = True
         
-        # 还原顺序
+        # 
         attn_scores = reverse_permute(attn_scores, sorted_indices)
         gene_ids = reverse_permute(input_ids, sorted_indices)
         
-        # 累积attention
+        # attention
         outputs = attn_scores.cpu().numpy()
         gene_ids_np = gene_ids.cpu().numpy()
         batch_size_curr = outputs.shape[0]
@@ -457,19 +457,19 @@ with torch.no_grad():
                     gene_pair_attention[(gene_i, gene_j)]['sum'] += cell_attn[i, j]
                     gene_pair_attention[(gene_i, gene_j)]['count'] += 1
         
-        # 清理内存
+        # 
         del cell_output, attn_scores
         torch.cuda.empty_cache()
 
-print(f"\n✓ 提取的总基因对数量: {len(gene_pair_attention)}")
+print(f"\n✓ : {len(gene_pair_attention)}")
 
 
-# ==================== 构建并筛选边 ====================
+# ====================  ====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 构建并筛选基因关系")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] ")
 print("="*80)
 
-# 构建所有边
+# 
 all_edges = []
 for (gene_i, gene_j), stats in gene_pair_attention.items():
     if stats['count'] > 0:
@@ -479,95 +479,95 @@ for (gene_i, gene_j), stats in gene_pair_attention.items():
             'EdgeWeight': stats['sum'] / stats['count']
         })
 all_edges_df = pd.DataFrame(all_edges)
-print(f"✓ 提取的总边数: {len(all_edges_df)}")
+print(f"✓ : {len(all_edges_df)}")
 
-# 按Label的Gene1筛选
+# LabelGene1
 filtered_edges_df = all_edges_df[all_edges_df['Gene1'].isin(label_gene1)].sort_values('EdgeWeight', ascending=False)
-print(f"✓ 筛选后（Gene1在Label中）的边数: {len(filtered_edges_df)} ({len(filtered_edges_df)/len(all_edges_df)*100:.1f}%)")
+print(f"✓ (Gene1Label): {len(filtered_edges_df)} ({len(filtered_edges_df)/len(all_edges_df)*100:.1f}%)")
 
-# 保存边文件
+# 
 filtered_edges_df.to_csv(TSV_PATH, sep='\t', index=False)
-print(f"✓ 基因关系文件已保存至: {TSV_PATH}")
+print(f"✓ : {TSV_PATH}")
 
 
-# ==================== 记录关键参数并追加到总CSV ====================
+# ==================== CSV ====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 记录关键参数（追加到总CSV）")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] (CSV)")
 print("="*80)
 
-# 计算运行时间
+# Timestamp
 end_time = time.time()
-run_time = (end_time - start_time) / 60  # 分钟
+run_time = (end_time - start_time) / 60  # 
 
-# 整理关键参数
+# 
 params = {
-    "模型名称": MODEL_NAME,
-    "数据类型": data_type,
-    "数据集名称": dataset,
-    "原始数据形状（转置前）": str(adata_original_shape),
-    "转置后数据形状（细胞×基因）": str(adata_transposed_shape),
-    "转置后总基因数": len(gene_symbols),
-    "基因字典匹配数": valid_gene_count,
-    "基因字典匹配率(%)": f"{valid_gene_count/len(gene_symbols)*100:.1f}",
-    "质控前细胞数": adata_pre_qc_n_obs,
-    "质控前基因数": adata_pre_qc_n_vars,
-    "质控后细胞数": adata.n_obs,
-    "质控后基因数": adata.n_vars,
-    "Tokenization后数据集大小": len(tokenized_dataset),
-    "最终用于模型的基因数": n_genes,
-    "模型加载设备": str(device),
-    "提取的总基因对数量": len(gene_pair_attention),
-    "提取的总边数": len(all_edges_df),
-    "Label中Gene1数量": len(label_gene1),
-    "筛选后（Gene1在Label中）的边数": len(filtered_edges_df),
-    "筛选率(%)": f"{len(filtered_edges_df)/len(all_edges_df)*100:.1f}",
-    "权重最小值": f"{filtered_edges_df['EdgeWeight'].min():.6f}" if not filtered_edges_df.empty else "0",
-    "权重最大值": f"{filtered_edges_df['EdgeWeight'].max():.6f}" if not filtered_edges_df.empty else "0",
-    "运行时间(分钟)": f"{run_time:.2f}",
-    "运行时间戳": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
-    "基因关系文件路径": TSV_PATH
+    "Model": MODEL_NAME,
+    "": data_type,
+    "Dataset": dataset,
+    "()": str(adata_original_shape),
+    "(×)": str(adata_transposed_shape),
+    "": len(gene_symbols),
+    "": valid_gene_count,
+    "(%)": f"{valid_gene_count/len(gene_symbols)*100:.1f}",
+    "": adata_pre_qc_n_obs,
+    "": adata_pre_qc_n_vars,
+    "": adata.n_obs,
+    "": adata.n_vars,
+    "TokenizationDataset": len(tokenized_dataset),
+    "Model": n_genes,
+    "Model": str(device),
+    "": len(gene_pair_attention),
+    "": len(all_edges_df),
+    "LabelGene1": len(label_gene1),
+    "(Gene1Label)": len(filtered_edges_df),
+    "(%)": f"{len(filtered_edges_df)/len(all_edges_df)*100:.1f}",
+    "": f"{filtered_edges_df['EdgeWeight'].min():.6f}" if not filtered_edges_df.empty else "0",
+    "": f"{filtered_edges_df['EdgeWeight'].max():.6f}" if not filtered_edges_df.empty else "0",
+    "Timestamp()": f"{run_time:.2f}",
+    "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
+    "": TSV_PATH
 }
 
-# 转换为DataFrame
+# DataFrame
 params_df = pd.DataFrame([params])
 
-# 追加到总CSV文件
+# CSV
 if os.path.exists(ALL_PARAMS_CSV):
-    # 文件存在，追加（不写表头）
+    # ,()
     params_df.to_csv(ALL_PARAMS_CSV, mode='a', header=False, index=False, encoding="utf-8")
-    print(f"✓ 已追加参数到总文件: {ALL_PARAMS_CSV}")
+    print(f"✓ : {ALL_PARAMS_CSV}")
 else:
-    # 文件不存在，创建并写入表头
+    # does not exist,
     params_df.to_csv(ALL_PARAMS_CSV, mode='w', header=True, index=False, encoding="utf-8")
-    print(f"✓ 已创建总参数文件并写入: {ALL_PARAMS_CSV}")
+    print(f"✓ : {ALL_PARAMS_CSV}")
 
-# 显示当前记录的关键信息
-print(f"\n✓ 当前数据集参数摘要:")
-print(f"  - 数据类型-数据集: {data_type}-{dataset}")
-print(f"  - 质控后细胞数: {adata.n_obs}, 基因数: {adata.n_vars}")
-print(f"  - 筛选后边数: {len(filtered_edges_df)}, 权重范围: [{filtered_edges_df['EdgeWeight'].min():.6f}, {filtered_edges_df['EdgeWeight'].max():.6f}]")
-print(f"  - 运行时间: {run_time:.2f}分钟")
+# 
+print(f"\n✓ Dataset:")
+print(f"  - -Dataset: {data_type}-{dataset}")
+print(f"  - : {adata.n_obs}, : {adata.n_vars}")
+print(f"  - : {len(filtered_edges_df)}, Weight range: [{filtered_edges_df['EdgeWeight'].min():.6f}, {filtered_edges_df['EdgeWeight'].max():.6f}]")
+print(f"  - Timestamp: {run_time:.2f}")
 
 
-# ==================== 清理临时文件 ====================
+# ====================  ====================
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 清理临时文件")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] ")
 print("="*80)
 
-# 清理临时loom文件
+# loom
 if os.path.exists(TEMP_LOOM_PATH):
     os.remove(TEMP_LOOM_PATH)
-    print(f"✓ 已删除临时文件: {TEMP_LOOM_PATH}")
+    print(f"✓ : {TEMP_LOOM_PATH}")
 
-# 清理临时数据集目录
+# Dataset
 if os.path.exists(TEMP_DATASET_DIR):
     import shutil
     shutil.rmtree(TEMP_DATASET_DIR)
-    print(f"✓ 已删除临时目录: {TEMP_DATASET_DIR}")
+    print(f"✓ : {TEMP_DATASET_DIR}")
 
 print("\n" + "="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] 处理完成！")
-print(f"输出文件汇总:")
-print(f"  - 总参数文件: {ALL_PARAMS_CSV}")
-print(f"  - 基因关系文件: {TSV_PATH}")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] !")
+print(f":")
+print(f"  - : {ALL_PARAMS_CSV}")
+print(f"  - : {TSV_PATH}")
 print("="*80)

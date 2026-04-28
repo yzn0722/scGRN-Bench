@@ -20,13 +20,13 @@ from scgpt.tokenizer.gene_tokenizer import GeneVocab
 from scgpt.model import TransformerModel
 from scgpt.utils import set_seed
 
-# ==================== 环境与警告配置 ====================
+# ====================  ====================
 os.environ["KMP_WARNINGS"] = "off"
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
 warnings.filterwarnings("ignore")
 
-# ==================== CLI / 全局默认配置（禁止硬编码绝对路径） ====================
+# ==================== CLI / () ====================
 import argparse
 from typing import Optional
 
@@ -92,20 +92,20 @@ PAD_VALUE = -2
 
 CONFIG = {}
 
-# ==================== 1. 初始化 scGPT 模型（只加载一次） ====================
+# ==================== 1.  scGPT Model() ====================
 def init_scgpt_model(model_dir: Path, seed: int):
     set_seed(seed)
 
     vocab_file = model_dir / "vocab.json"
     if not vocab_file.exists():
-        raise FileNotFoundError(f"词汇表文件不存在: {vocab_file}")
+        raise FileNotFoundError(f"Vocabularydoes not exist: {vocab_file}")
     vocab = GeneVocab.from_file(vocab_file)
 
-    # 补特殊 token
+    #  token
     for s in SPECIAL_TOKENS:
         if s not in vocab:
             vocab.append_token(s)
-            print(f"⚠️ 补充缺失的特殊Token: {s}")
+            print(f"[WARN] Added missing special token: {s}")
 
     model_config_file = model_dir / "args.json"
     with open(model_config_file, "r") as f:
@@ -117,7 +117,7 @@ def init_scgpt_model(model_dir: Path, seed: int):
     nlayers = model_configs["nlayers"]
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"✅ 使用计算设备: {device}")
+    print(f"[INFO] Device: {device}")
     if device.type == "cuda":
         torch.cuda.empty_cache()
 
@@ -138,24 +138,24 @@ def init_scgpt_model(model_dir: Path, seed: int):
     try:
         state_dict = torch.load(model_file, map_location=device)
         model.load_state_dict(state_dict)
-        print(f"✅ 完整加载模型权重: {model_file}")
+        print(f"[INFO] Full model weights loaded: {model_file}")
     except Exception as e:
-        print(f"⚠️ 完整加载失败，尝试部分加载: {str(e)[:80]}")
+        print(f"[WARN] Full load failed, fallback to partial load: {str(e)[:80]}")
         model_dict = model.state_dict()
         pretrained_dict = torch.load(model_file, map_location=device)
         pretrained_dict = {k: v for k, v in pretrained_dict.items()
                            if k in model_dict and v.shape == model_dict[k].shape}
         model_dict.update(pretrained_dict)
         model.load_state_dict(model_dict)
-        print(f"✅ 成功加载 {len(pretrained_dict)}/{len(model_dict)} 个匹配参数")
+        print(f"[INFO] Loaded matched params: {len(pretrained_dict)}/{len(model_dict)}")
 
     model = model.to(device)
     model.eval()
 
-    # transformer encoder half（GPU 优化）
+    # transformer encoder half(GPU )
     if device.type == "cuda":
         model.transformer_encoder = model.transformer_encoder.half()
-        print("✅ Transformer Encoder 转换为 float16（GPU优化）")
+        print("[INFO] Transformer encoder converted to float16 (GPU optimization).")
 
     return model, vocab, device, model_configs
 
@@ -165,7 +165,7 @@ VOCAB = None
 DEVICE = None
 MODEL_CONFIGS = None
 
-# ==================== 2. 工具函数 ====================
+# ==================== 2.  ====================
 def extract_dataset_name(file_path: str) -> str:
     base = os.path.basename(file_path)
     for suffix in ["_chip_matched-ExpressionData.csv", "_processed-ExpressionData.csv", "-ExpressionData.csv"]:
@@ -179,14 +179,14 @@ def clear_gpu_cache(force=False):
         torch.cuda.empty_cache()
         if force:
             torch.cuda.ipc_collect()
-        # 少打一点 log，避免刷屏
-        # print("🔧 已清理GPU显存缓存")
+        #  log,
+        # print("🔧 GPU")
 
 
 def read_expression_matrix(path: str) -> pd.DataFrame:
     """
-    统一读取：返回 df [cells x genes]
-    期望文件形态：行=gene, 列=cell（index_col=0） -> 读入后转置
+    : df [cells x genes]
+    :=gene, =cell(index_col=0) -> 
     """
     if not os.path.exists(path):
         raise FileNotFoundError(f"Expression file not found: {path}")
@@ -214,17 +214,17 @@ def read_expression_matrix(path: str) -> pd.DataFrame:
     if df.shape[0] == 0 or df.shape[1] == 0:
         raise ValueError(f"Empty expression matrix after parsing: {df.shape}")
 
-    # 转置：cells x genes
+    # :cells x genes
     df = df.T
-    print(f"📊 Expression loaded: {df.shape[0]} cells x {df.shape[1]} genes")
+    print(f"[INFO] Expression loaded: {df.shape[0]} cells x {df.shape[1]} genes")
     return df
 
 
-# ==================== 3. 序列构建 ====================
+# ==================== 3.  ====================
 def build_gene_sequences(expr_df: pd.DataFrame, vocab: GeneVocab, config: dict):
     """
     expr_df: [cells x genes]
-    返回:
+    :
       sequences: List[List[int]]
       valid_gene_symbols: List[str]
       token_to_gene: Dict[int, str]
@@ -233,7 +233,7 @@ def build_gene_sequences(expr_df: pd.DataFrame, vocab: GeneVocab, config: dict):
     genes = expr_df.columns.tolist()
     expr_matrix = expr_df.values.astype(np.float32)
     n_cells, n_genes = expr_matrix.shape
-    print(f"📊 Expression matrix: {n_cells} cells x {n_genes} genes")
+    print(f"[INFO] Expression matrix: {n_cells} cells x {n_genes} genes")
 
     # gene -> token / token -> gene
     gene_to_token = {}
@@ -247,9 +247,9 @@ def build_gene_sequences(expr_df: pd.DataFrame, vocab: GeneVocab, config: dict):
             token_to_gene[tid] = gene
             valid_gene_idx.append(i)
 
-    print(f"✅ 匹配到的基因: {len(valid_gene_idx)}/{n_genes}")
+    print(f"[INFO] Matched genes: {len(valid_gene_idx)}/{n_genes}")
     if len(valid_gene_idx) == 0:
-        raise ValueError("⚠️ 无匹配的基因，无法继续处理！")
+        raise ValueError("No matched genes. Cannot continue.")
 
     expr_matrix = expr_matrix[:, valid_gene_idx]
     valid_gene_symbols = [genes[i] for i in valid_gene_idx]
@@ -265,12 +265,12 @@ def build_gene_sequences(expr_df: pd.DataFrame, vocab: GeneVocab, config: dict):
     else:
         n_cells_use = n_cells
 
-    print(f"🔬 使用细胞数: {n_cells_use}")
+    print(f"🔬 : {n_cells_use}")
 
     topk = min(int(config["SEQ_TOPK_GENES"]), len(valid_gene_symbols))
     max_len = int(config["MAX_SEQ_LEN"])
 
-    # 每个细胞 topk indices (desc)
+    #  topk indices (desc)
     topk_indices = np.argsort(expr_matrix, axis=1)[:, -topk:][:, ::-1]
 
     sequences = []
@@ -281,10 +281,10 @@ def build_gene_sequences(expr_df: pd.DataFrame, vocab: GeneVocab, config: dict):
     return sequences, valid_gene_symbols, token_to_gene, n_cells_use
 
 
-# ==================== 4. Hidden 提取（内存聚合） ====================
+# ==================== 4. Hidden () ====================
 def extract_hidden_embeddings(model, sequences, gene_symbols, token_to_gene, vocab, config):
     """
-    返回：
+    :
       gene_embeddings: [n_final_genes, hidden_dim]
       final_gene_list
     """
@@ -292,13 +292,13 @@ def extract_hidden_embeddings(model, sequences, gene_symbols, token_to_gene, voc
     batch_size = int(config["BATCH_SIZE"])
     n_batches = (len(sequences) + batch_size - 1) // batch_size
 
-    # 累加：token_id -> sum/cnt
+    # :token_id -> sum/cnt
     sum_vec = {}
     cnt = {}
 
     pad_id = int(vocab[PAD_TOKEN])
 
-    print(f"\n🚀 Forward scGPT (batch_size={batch_size}, total_batches={n_batches})")
+    print(f"\n[INFO] Forward scGPT (batch_size={batch_size}, total_batches={n_batches})")
 
     with torch.no_grad():
         for batch_idx in tqdm(range(n_batches), desc="Forward scGPT"):
@@ -371,16 +371,16 @@ def extract_hidden_embeddings(model, sequences, gene_symbols, token_to_gene, voc
     final_gene_list = sorted(gene_emb.keys())
     gene_embeddings = np.stack([gene_emb[g] for g in final_gene_list], axis=0)
 
-    print(f"✅ 提取完成 | {len(final_gene_list)} genes x {hidden_dim} dim")
+    print(f"[INFO] Extraction complete | {len(final_gene_list)} genes x {hidden_dim} dim")
 
     clear_gpu_cache(force=True)
     return gene_embeddings, final_gene_list
 
 
-# ==================== 5. 余弦边：流式写出（统一格式） ====================
+# ==================== 5. :() ====================
 def compute_and_save_all_cosine_edges_stream(gene_list, embeddings, output_tsv):
     """
-    输出所有 i!=j 的有向边（流式写），列：Gene1 Gene2 EdgeWeight
+     i!=j (),:Gene1 Gene2 EdgeWeight
     """
     gene_list = list(gene_list)
     emb = np.asarray(embeddings, dtype=np.float32)
@@ -410,12 +410,12 @@ def compute_and_save_all_cosine_edges_stream(gene_list, embeddings, output_tsv):
     return {"mode": "all_stream", "n_genes": int(n_genes), "n_edges": int(total_edges)}
 
 
-# ==================== 6. 单数据集处理（统一 IO 规则） ====================
+# ==================== 6. Dataset( IO ) ====================
 def process_single_dataset(expr_path: str, folder_name: str, config: dict):
     start_time = datetime.datetime.now()
     dataset_name = extract_dataset_name(expr_path)
 
-    # 输出目录：OUTPUT_ROOT/Folder/Dataset
+    # :OUTPUT_ROOT/Folder/Dataset
     out_dir = OUTPUT_ROOT / folder_name / dataset_name
     out_dir.mkdir(exist_ok=True, parents=True)
 
@@ -438,8 +438,8 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
 
     try:
         print(f"\n{'='*60}")
-        print(f"🔍 开始处理数据集: {dataset_name} | Folder: {folder_name}")
-        print(f"📂 输入文件: {expr_path}")
+        print(f"[INFO] Start dataset: {dataset_name} | Folder: {folder_name}")
+        print(f"[INFO] Input file: {expr_path}")
 
         # 1) read expression -> cells x genes
         df = read_expression_matrix(expr_path)
@@ -461,7 +461,7 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
         cosine_info = compute_and_save_all_cosine_edges_stream(final_gene_list, gene_embeddings, edge_tsv)
         record["Total_Edges_Generated"] = int(cosine_info["n_edges"])
         record["Output_TSV_Path"] = str(edge_tsv)
-        print(f"✅ 边文件保存: {edge_tsv}")
+        print(f"[INFO] Edge file saved: {edge_tsv}")
 
         # 5) save run_params.json
         run_params = {
@@ -503,20 +503,20 @@ def process_single_dataset(expr_path: str, folder_name: str, config: dict):
             json.dump(run_params, f, indent=2, ensure_ascii=False)
 
         record["Process_Time_Seconds"] = run_params["processing_time_seconds"]
-        print(f"✅ 数据集处理完成 | 总耗时: {record['Process_Time_Seconds']}秒")
+        print(f"[INFO] Dataset done | elapsed: {record['Process_Time_Seconds']}s")
 
     except Exception as e:
         traceback_msg = str(e)[:300]
         record["Process_Status"] = "Failed"
         record["Error_Message"] = traceback_msg
-        print(f"❌ 处理失败: {dataset_name} | {traceback_msg}")
+        print(f"[ERROR] Failed: {dataset_name} | {traceback_msg}")
         import traceback
         traceback.print_exc()
 
     return record
 
 
-# ==================== 7. 批量处理主函数（统一规则） ====================
+# ==================== 7. () ====================
 def main():
     global MODEL, VOCAB, DEVICE, MODEL_CONFIGS, CONFIG
     args = parse_args()
@@ -538,12 +538,12 @@ def main():
     }
 
     output_root.mkdir(exist_ok=True, parents=True)
-    print(f"\n🚀 启动 {MODEL_NAME} Hidden States 批量处理流程")
-    print(f"📥 输入根目录: {input_root}")
-    print(f"📤 输出根目录: {output_root}")
-    print(f"📦 模型目录: {model_dir}")
-    print(f"📂 Folders: {args.folders}")
-    print(f"⚙️  当前配置: {json.dumps({k:v for k,v in CONFIG.items() if k!='MODEL_DIR'}, indent=2, ensure_ascii=False)}")
+    print(f"\n[INFO] Start {MODEL_NAME} hidden states batch processing")
+    print(f"[INFO] Input root: {input_root}")
+    print(f"[INFO] Output root: {output_root}")
+    print(f"📦 Model: {model_dir}")
+    print(f"[INFO] Folders: {args.folders}")
+    print(f"[INFO] Current config: {json.dumps({k:v for k,v in CONFIG.items() if k!='MODEL_DIR'}, indent=2, ensure_ascii=False)}")
 
     # init model once
     MODEL, VOCAB, DEVICE, MODEL_CONFIGS = init_scgpt_model(model_dir=model_dir, seed=int(args.seed))
@@ -557,18 +557,18 @@ def main():
     for folder in args.folders:
         folder_path = input_root / folder
         if not folder_path.exists():
-            print(f"\n⚠️ 文件夹不存在，跳过: {folder_path}")
+            print(f"\n[WARN] Folder not found, skip: {folder_path}")
             continue
 
         print(f"\n{'='*60}")
-        print(f"📂 处理文件夹: {folder}")
+        print(f"[INFO] Processing folder: {folder}")
 
         if folder == "CHIP":
             expr_files = list(folder_path.glob("*_chip_matched-ExpressionData.csv"))
         else:
             expr_files = list(folder_path.glob("*_processed-ExpressionData.csv"))
 
-        print(f"🔍 找到 {len(expr_files)} 个表达矩阵文件")
+        print(f"[INFO] Found {len(expr_files)} expression files")
 
         for expr_file in expr_files:
             rec = process_single_dataset(str(expr_file), folder, CONFIG)
@@ -579,14 +579,14 @@ def main():
         summary_df = pd.DataFrame(all_records)
         summary_path = output_root / f"{MODEL_NAME}_processing_summary.csv"
         summary_df.to_csv(summary_path, index=False)
-        print(f"\n📊 汇总记录已保存: {summary_path}")
+        print(f"\n[INFO] Summary saved: {summary_path}")
 
         success_count = sum(1 for r in all_records if r["Process_Status"] == "Success")
         fail_count = len(all_records) - success_count
-        print(f"\n📈 处理统计: 成功 {success_count} / 失败 {fail_count}")
+        print(f"\n[INFO] Stats: success {success_count} / fail {fail_count}")
 
     print(f"\n{'='*60}")
-    print(f"🎉 批量处理流程结束！结果保存在: {output_root}")
+    print(f"[INFO] Batch finished. Outputs saved in: {output_root}")
 
 
 if __name__ == "__main__":

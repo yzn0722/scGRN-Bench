@@ -2,8 +2,8 @@
 
 
 """
-Geneformer Attention提取 - 批量处理版（支持CHIP/Non_CHIP/STRING）
-统一输出格式，参数汇总到单个CSV，支持批量运行
+Geneformer attention extraction - batch mode (supports CHIP/Non_CHIP/STRING)
+Unified output format with batch-level parameter logging.
 """
 
 import scanpy as sc
@@ -22,35 +22,35 @@ import datetime
 import sys
 from tqdm import tqdm
 
-# ==================== 接收命令行参数 ====================
+# ==================== Command-line arguments ====================
 if len(sys.argv) != 3:
-    print("用法: python geneformer_attention_batch.py <数据类型> <数据集名称>")
-    print("例如: python geneformer_attention_batch.py CHIP hESC")
+    print("Usage: python geneformer_attention_batch.py <data_type> <dataset_name>")
+    print("Example: python geneformer_attention_batch.py CHIP hESC")
     print("      python geneformer_attention_batch.py Non_CHIP hHep")
     print("      python geneformer_attention_batch.py STRING mHSC-E")
     sys.exit(1)
 
-data_type = sys.argv[1]  # 数据类型：CHIP / Non_CHIP / STRING
-dataset = sys.argv[2]    # 数据集名称：hESC、hHep等
-MODEL_VERSION = "6L"     # 固定模型版本
+data_type = sys.argv[1]  # Data type: CHIP / Non_CHIP / STRING
+dataset = sys.argv[2]    # Dataset name, such as hESC or hHep
+MODEL_VERSION = "6L"     # Fixed model version
 MODEL_NAME = f"geneformer_{MODEL_VERSION}"
 
 
 
-# 校验数据类型
+# Validate data type
 valid_data_types = ["CHIP", "Non_CHIP", "STRING"]
 if data_type not in valid_data_types:
-    raise ValueError(f"不支持的数据类型: {data_type}（仅支持{valid_data_types}）")
+    raise ValueError(f"Unsupported data type: {data_type}(supported values{valid_data_types})")
 
-# ==================== 路径配置（动态适配类型+数据集）====================
-# 根路径配置
+# ==================== Path configuration ====================
+# Base paths
 GENEFORMER_BASE = "/mnt/md0/yzn/scFM-Bench-main/data/weights/Geneformer"
 DICT_DIR = f"{GENEFORMER_BASE}/dicts"
 MODEL_DIR = f"{GENEFORMER_BASE}/default/{MODEL_VERSION}"
 INPUT_ROOT = "/mnt/md0/yzn/Beeline-master/benchmark_SF/input_process1000"
 OUTPUT_ROOT = Path("/mnt/md0/yzn/Beeline-master/benchmark_SF/model/output_att1000/geneformer")
 
-# 根据类型确定输入路径和文件后缀
+# Resolve input subdirectory and filename suffix from data type
 if data_type == "CHIP":
     file_suffix = "_chip_matched"
     input_subdir = "CHIP"
@@ -58,56 +58,56 @@ elif data_type == "Non_CHIP" or data_type == "STRING":
     file_suffix = "_processed"
     input_subdir = data_type
 
-# 输入文件路径（动态拼接）
+# Input file paths
 csv_path = Path(f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv")
 network_path = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
-# 输出路径（按类型分目录）
+# Output directory grouped by data type
 TYPE_OUTPUT_DIR = OUTPUT_ROOT / data_type
 TYPE_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
-# 临时文件路径（含类型+数据集标识，避免冲突）
+# Temporary directories scoped by data type and dataset
 TEMP_PREPROCESSED_DIR = OUTPUT_ROOT / "temp_preprocessed" / f"{data_type}_{dataset}"
 TEMP_TOKENIZED_DIR = OUTPUT_ROOT / "temp_tokenized" / f"{data_type}_{dataset}"
 TEMP_PREPROCESSED_DIR.mkdir(exist_ok=True, parents=True)
 TEMP_TOKENIZED_DIR.mkdir(exist_ok=True, parents=True)
 
-# 输出文件命名（统一规范：模型-版本-类型-数据集-文件名）
+# Output naming convention: model-version-type-dataset-file
 file_prefix = f"geneformer-{MODEL_VERSION}-{data_type}-{dataset}-att"
-# 移除原始TSV路径定义
+# Only keep the filtered TSV path
 filtered_tsv_path = TYPE_OUTPUT_DIR / f"{file_prefix}_filtered.tsv"
 
-# 总参数CSV文件（所有任务共用）
+# Shared parameter summary CSV
 ALL_PARAMS_CSV = OUTPUT_ROOT / "geneformer-all-params.csv"
 
 print("="*80)
-print(f"📌 任务配置：{MODEL_NAME} | {data_type} | {dataset}")
+print(f"[INFO] Task config: {MODEL_NAME} | {data_type} | {dataset}")
 print("="*80)
-print(f"模型路径: {MODEL_DIR}")
-print(f"输入表达数据: {csv_path}")
-print(f"输入网络数据: {network_path}")
-print(f"输出目录: {TYPE_OUTPUT_DIR}")
-print(f"总参数文件: {ALL_PARAMS_CSV}")
+print(f"Model path: {MODEL_DIR}")
+print(f"Input expression file: {csv_path}")
+print(f"Input network file: {network_path}")
+print(f"Output directory: {TYPE_OUTPUT_DIR}")
+print(f"Parameter summary file: {ALL_PARAMS_CSV}")
 print("="*80)
 
-# ========== 加载数据 ==========
+# ========== Load data ==========
 print("\n" + "="*60)
-print("1️⃣ 加载原始数据")
+print("[STEP 1] Load raw data")
 print("="*60)
 
 if not csv_path.exists():
-    raise FileNotFoundError(f"表达数据文件不存在: {csv_path}")
+    raise FileNotFoundError(f"Expression file not found: {csv_path}")
 
 adata = sc.read_csv(str(csv_path))
 adata = adata.T
-adata_original_shape = adata.shape  # 记录原始形状
-print(f"原始数据形状 (细胞×基因): {adata.shape}")
-print(f"原始细胞数: {adata.n_obs}")
-print(f"原始基因数: {adata.n_vars}")
+adata_original_shape = adata.shape  # Keep the original shape for logging
+print(f"Raw data shape (cells x genes): {adata.shape}")
+print(f"Raw cell count: {adata.n_obs}")
+print(f"Raw gene count: {adata.n_vars}")
 
-# ========== 加载Geneformer字典 ==========
+# ========== Load Geneformer dictionaries ==========
 print("\n" + "="*60)
-print("2️⃣ 加载Geneformer字典")
+print("[STEP 2] Load Geneformer dictionary")
 print("="*60)
 
 with open(f"{DICT_DIR}/gene_name_id_dict.pkl", "rb") as f:
@@ -116,11 +116,11 @@ with open(f"{DICT_DIR}/gene_name_id_dict.pkl", "rb") as f:
 with open(f"{DICT_DIR}/token_dictionary.pkl", "rb") as f:
     token_dict = pickle.load(f)
 
-print(f"Geneformer字典包含 {len(gene_name_dict)} 个基因")
+print(f"Geneformer dictionary contains {len(gene_name_dict)} genes")
 
-# ========== 匹配基因并只保留匹配的 ==========
+# ========== Match genes and keep matched entries only ==========
 print("\n" + "="*60)
-print("3️⃣ 匹配基因（只保留匹配的）")
+print("[STEP 3] Match genes (keep matched only)")
 print("="*60)
 
 gene_symbol_col = None
@@ -138,18 +138,18 @@ matched_mask = [gene in gene_name_dict for gene in gene_symbols]
 matched_count = sum(matched_mask)
 unmatched_count = len(matched_mask) - matched_count
 
-print(f"\n匹配统计:")
-print(f"  总基因数: {len(gene_symbols)}")
-print(f"  匹配的基因: {matched_count} ({100*matched_count/len(gene_symbols):.1f}%)")
-print(f"  未匹配的基因: {unmatched_count} ({100*unmatched_count/len(gene_symbols):.1f}%)")
+print(f"\nMatch summary:")
+print(f"  Total genes: {len(gene_symbols)}")
+print(f"  Matched genes: {matched_count} ({100*matched_count/len(gene_symbols):.1f}%)")
+print(f"  Unmatched genes: {unmatched_count} ({100*unmatched_count/len(gene_symbols):.1f}%)")
 
 if unmatched_count > 0:
     unmatched_genes = [g for g, m in zip(gene_symbols, matched_mask) if not m]
-    print(f"\n⚠️  丢弃 {unmatched_count} 个未匹配的基因（示例前10个）: {unmatched_genes[:10]}")
+    print(f"\n[WARN] Dropped {unmatched_count} unmatched genes (first 10): {unmatched_genes[:10]}")
 
 if matched_count == 0:
-    print("\n❌ 错误: 没有基因匹配Geneformer字典！")
-    raise ValueError("没有基因匹配Geneformer字典")
+    print("\n[ERROR] No genes matched Geneformer dictionary.")
+    raise ValueError("No genes matched the Geneformer dictionary")
 
 adata = adata[:, matched_mask].copy()
 matched_gene_symbols = [g for g, m in zip(gene_symbols, matched_mask) if m]
@@ -159,22 +159,22 @@ adata.var['gene_name'] = matched_gene_symbols
 adata.var['ensembl_id'] = ensembl_ids
 adata.var_names = matched_gene_symbols
 
-print(f"\n✓ 保留 {adata.n_vars} 个匹配的基因用于分析")
-print(f"前10个基因: {matched_gene_symbols[:10]}")
+print(f"\n[INFO] Kept {adata.n_vars} matched genes for analysis")
+print(f"First 10 genes: {matched_gene_symbols[:10]}")
 
-# ========== 质控和归一化 ==========
+# ========== QC and normalization ==========
 print("\n" + "="*60)
-print("4️⃣ 质控和归一化")
+print("[STEP 4] QC and normalization")
 print("="*60)
 
 adata_pre_qc_n_obs = adata.n_obs
 adata_pre_qc_n_vars = adata.n_vars
-print(f"质控前: {adata.shape}")
+print(f"Before QC: {adata.shape}")
 
 sc.pp.filter_cells(adata, min_genes=200)
-print(f"质控后: {adata.shape}")
+print(f"After QC: {adata.shape}")
 
-print("\n归一化...")
+print("\nNormalizing...")
 adata.obs['n_counts'] = (adata.X.sum(axis=1).A1 
                          if scipy.sparse.issparse(adata.X) 
                          else adata.X.sum(axis=1))
@@ -184,16 +184,16 @@ sc.pp.log1p(adata)
 if 'cell_type' not in adata.obs.columns:
     adata.obs['cell_type'] = 'unknown'
 
-print(f"✓ 预处理完成")
+print(f"[INFO] Preprocessing complete")
 
-# ========== 保存为Loom并Tokenize ==========
+# ========== Save as loom and tokenize ==========
 print("\n" + "="*60)
-print("5️⃣ Tokenization")
+print("[STEP 5] Tokenization")
 print("="*60)
 
 loom_path = TEMP_PREPROCESSED_DIR / f"{data_type}_{dataset}.loom"
 adata.write_loom(str(loom_path), write_obsm_varm=False)
-print(f"✓ Loom文件已保存: {loom_path}")
+print(f"[INFO] Loom file saved: {loom_path}")
 
 from geneformer import TranscriptomeTokenizer
 tokenizer = TranscriptomeTokenizer(
@@ -211,15 +211,15 @@ tokenizer.tokenize_data(
     use_generator=False
 )
 
-print("✓ Tokenization完成")
+print("[INFO] Tokenization complete")
 
-# ========== 核心工具函数（保留原修复逻辑） ==========
+# ========== Core helper functions ==========
 def rank_normalize_fixed(attn_scores):
-    """修复后的Rank Normalization（保持原逻辑，修正排序方向和维度）"""
+    """Fixed rank normalization while preserving the original logic."""
     batch_size, num_heads, M, _ = attn_scores.shape
     attn_normed = torch.zeros_like(attn_scores, dtype=torch.float32)
     
-    # 行Rank Normalization（降序）
+    # Row-wise rank normalization (descending)
     for b in range(batch_size):
         for h in range(num_heads):
             row_scores = attn_scores[b, h]
@@ -228,7 +228,7 @@ def rank_normalize_fixed(attn_scores):
             row_normed = rank.float() / (M - 1) if M > 1 else rank.float()
             attn_normed[b, h] = row_normed
     
-    # 列Rank Normalization（降序）
+    # Column-wise rank normalization (descending)
     for b in range(batch_size):
         for h in range(num_heads):
             col_scores = attn_normed[b, h].T
@@ -240,7 +240,7 @@ def rank_normalize_fixed(attn_scores):
     return attn_normed
 
 def reverse_permute_fixed(tensor, indices):
-    """修复后的基因顺序恢复（保持原逻辑，优化实现）"""
+    """Restore gene order while preserving the original logic."""
     batch_size = tensor.size(0)
     device = tensor.device
     
@@ -264,13 +264,13 @@ def reverse_permute_fixed(tensor, indices):
             result[i, indices[i]] = tensor[i]
         return result
 
-# ========== Geneformer Attention提取 ==========
+# ========== Extract Geneformer attention ==========
 print("\n" + "="*60)
-print("6️⃣ 提取Attention")
+print("[STEP 6] Extract attention")
 print("="*60)
 
-# 加载模型
-print("\n加载模型...")
+# Load model
+print("\nLoading model...")
 model = BertForMaskedLM.from_pretrained(
     MODEL_DIR,
     output_attentions=True,
@@ -283,19 +283,19 @@ model.eval()
 
 num_layers = model.config.num_hidden_layers
 num_heads = model.config.num_attention_heads
-print(f"✓ 模型已加载到 {device}")
-print(f"  总层数: {num_layers}")
-print(f"  注意力头数: {num_heads}")
+print(f"[INFO] Model loaded on {device}")
+print(f"  Total layers: {num_layers}")
+print(f"  Attention heads: {num_heads}")
 
-# 加载tokenized数据
-print("\n加载tokenized数据...")
+# Load tokenized data
+print("\nLoading tokenized data...")
 tokenized_dataset_path = TEMP_TOKENIZED_DIR / f"{data_type}_{dataset}.dataset"
 tokenized_dataset = load_from_disk(str(tokenized_dataset_path))
 tokenized_size = len(tokenized_dataset)
-print(f"✓ 数据集大小: {tokenized_size} 个细胞")
+print(f"[INFO] Dataset size: {tokenized_size} cells")
 
-# 获取基因名列表
-print("\n获取基因名映射...")
+# Build gene-name mapping
+print("\nBuilding gene-name mapping...")
 id_to_ensembl = {v: k for k, v in token_dict.items()}
 ensembl_to_gene = {v: k for k, v in gene_name_dict.items()}
 
@@ -311,10 +311,10 @@ valid_indices = [i for i, v in enumerate(valid_mask) if v]
 final_gene_names = [gene_names_from_tokens[i] for i in valid_indices]
 n_final_genes = len(final_gene_names)
 
-print(f"✓ 有效基因数: {n_final_genes}")
-print(f"前10个基因: {final_gene_names[:10]}")
+print(f"[INFO] Valid genes: {n_final_genes}")
+print(f"First 10 genes: {final_gene_names[:10]}")
 
-# 准备DataLoader
+# Prepare dataloader
 batch_size = 8
 max_seq_len = max(len(item['input_ids']) for item in tokenized_dataset)
 
@@ -354,11 +354,11 @@ dataloader = DataLoader(
     collate_fn=collate_fn
 )
 
-print(f"✓ DataLoader准备完成: {len(dataloader)} 个batch")
+print(f"[INFO] Dataloader ready: {len(dataloader)} batches")
 
-# 提取attention
+# Extract attention
 target_layer = -1
-print(f"\n开始提取attention (Layer {target_layer})...")
+print(f"\nStart attention extraction (Layer {target_layer})...")
 
 attention_sum = None
 num_cells_processed = 0
@@ -370,41 +370,41 @@ with torch.no_grad():
         attention_mask = batch['attention_mask'].to(device)
         sorted_indices = batch['sorted_indices'].to(device)
         
-        # 前向传播
+        # Forward pass
         outputs = model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_attentions=True
         )
         
-        # 提取目标层的attention
+        # Extract target-layer attention
         attn_scores = outputs.attentions[target_layer]
         
-        # 归一化
+        # Normalize
         attn_scores = rank_normalize_fixed(attn_scores)
         
-        # 平均所有attention heads
+        # Average over attention heads
         attn_scores = attn_scores.mean(dim=1)
         
-        # 恢复基因顺序
+        # Restore gene order
         attn_scores = reverse_permute_fixed(attn_scores, sorted_indices)
         
         attn_numpy = attn_scores.cpu().numpy()
         
-        # 应用mask（去除padding）
+        # Apply mask and remove padding
         mask_2d = attention_mask.cpu().numpy()
         mask_matrix = mask_2d[:, :, None] * mask_2d[:, None, :]
         attn_numpy = attn_numpy * mask_matrix
         
-        # 调试信息
+        # Debug information
         if batch_debug < 2:
-            print(f"\nBatch {batch_idx+1} 统计:")
-            print(f"  Attention均值: {attn_numpy.mean():.6f}")
-            print(f"  Attention最大值: {attn_numpy.max():.6f}")
-            print(f"  非零值比例: {(attn_numpy != 0).mean():.6f}")
+            print(f"\nBatch {batch_idx+1} statistics:")
+            print(f"  Attention mean: {attn_numpy.mean():.6f}")
+            print(f"  Attention max: {attn_numpy.max():.6f}")
+            print(f"  Non-zero ratio: {(attn_numpy != 0).mean():.6f}")
             batch_debug += 1
         
-        # 累加attention
+        # Accumulate attention
         if attention_sum is None:
             attention_sum = attn_numpy.sum(axis=0)
         else:
@@ -412,30 +412,30 @@ with torch.no_grad():
         
         num_cells_processed += input_ids.shape[0]
         
-        # 清理显存
+        # Clear GPU cache
         del outputs, attn_scores, input_ids, attention_mask
         torch.cuda.empty_cache()
 
-print(f"✓ Attention提取完成，共处理 {num_cells_processed} 个细胞")
+print(f"[INFO] Attention extraction complete. Processed {num_cells_processed} cells")
 
-# 计算平均attention
+# Compute mean attention
 avg_attention = attention_sum / num_cells_processed
 
-# 提取有效基因区域
+# Keep the valid-gene region
 gene_attention = avg_attention[np.ix_(valid_indices, valid_indices)]
 
-print(f"\n基因间attention矩阵形状: {gene_attention.shape}")
-print(f"Attention统计:")
-print(f"  均值: {gene_attention.mean():.6f}")
-print(f"  最大值: {gene_attention.max():.6f}")
-print(f"  最小值: {gene_attention.min():.6f}")
+print(f"\nGene-gene attention matrix shape: {gene_attention.shape}")
+print(f"Attentionstatistics:")
+print(f"  Mean: {gene_attention.mean():.6f}")
+print(f"  Max: {gene_attention.max():.6f}")
+print(f"  Min: {gene_attention.min():.6f}")
 
-# ========== 保存结果 ==========
+# ========== Save outputs ==========
 print("\n" + "="*60)
-print("7️⃣ 保存结果")
+print("[STEP 7] Save results")
 print("="*60)
 
-# 转换为三列TSV格式（仅用于后续筛选，不保存原始文件）
+# Build a 3-column TSV table for downstream filtering
 gene_attention_df = pd.DataFrame(
     gene_attention,
     index=final_gene_names,
@@ -447,113 +447,113 @@ gene_interactions_df.columns = ["Gene1", "Gene2", "EdgeWeight"]
 gene_interactions_df = gene_interactions_df[gene_interactions_df["Gene1"] != gene_interactions_df["Gene2"]]
 gene_interactions_df = gene_interactions_df.sort_values(by="EdgeWeight", ascending=False).reset_index(drop=True)
 
-# 移除原始TSV的保存逻辑
-# ↓↓↓ 注释/删除原始TSV保存代码 ↓↓↓
+# Raw TSV saving is intentionally disabled
+# Raw TSV saving code removed
 # gene_interactions_df.to_csv(interactions_tsv_path, sep="\t", index=False)
-# print(f"✓ 原始基因交互TSV: {interactions_tsv_path}")
+# print(f"[INFO] Raw interaction TSV: {interactions_tsv_path}")
 
-# 筛选Network文件
-print("\n筛选基因交互TSV...")
+# Filter with the network file
+print("\nFiltering interaction TSV...")
 if not os.path.exists(network_path):
-    raise FileNotFoundError(f"Network文件不存在: {network_path}")
+    raise FileNotFoundError(f"Network file not found: {network_path}")
 
 network_df = pd.read_csv(network_path)
 target_gene1_list = network_df["Gene1"].unique().tolist()
 filtered_interactions = gene_interactions_df[gene_interactions_df["Gene1"].isin(target_gene1_list)]
 filtered_interactions = filtered_interactions.sort_values(by="EdgeWeight", ascending=False).reset_index(drop=True)
 
-# 保存筛选后TSV
+# Save the filtered TSV
 filtered_interactions.to_csv(filtered_tsv_path, sep="\t", index=False)
-print(f"✓ 筛选后基因交互TSV: {filtered_tsv_path}")
+print(f"[INFO] Filtered interaction TSV: {filtered_tsv_path}")
 
-# ========== 记录关键参数（追加到总CSV） ==========
+# ========== Record run parameters ==========
 print("\n" + "="*60)
-print("8️⃣ 记录运行参数")
+print("[STEP 8] Save run parameters")
 print("="*60)
 
-# 计算运行时间（从脚本开始到现在）
+# Compute runtime from script start
 run_time = (datetime.datetime.now() - datetime.datetime.fromtimestamp(os.path.getctime(__file__))).total_seconds() / 60
 
-# 整理参数（移除原始TSV路径相关字段）
+# Collect run parameters
 params = {
-    "模型名称": "geneformer",
-    "模型版本": MODEL_VERSION,
-    "数据类型": data_type,
-    "数据集名称": dataset,
-    "原始数据形状（细胞×基因）": str(adata_original_shape),
-    "转置后总基因数": len(gene_symbols),
-    "基因字典匹配数": matched_count,
-    "基因字典匹配率(%)": f"{matched_count/len(gene_symbols)*100:.1f}",
-    "质控前细胞数": adata_pre_qc_n_obs,
-    "质控前基因数": adata_pre_qc_n_vars,
-    "质控后细胞数": adata.n_obs,
-    "质控后基因数": adata.n_vars,
-    "Tokenization后数据集大小": tokenized_size,
-    "最终用于模型的基因数": n_final_genes,
-    "模型加载设备": str(device),
-    "提取的总基因对数量": len(gene_interactions_df),
-    "提取的总边数": len(gene_interactions_df),
-    "Label中Gene1数量": len(target_gene1_list),
-    "筛选后（Gene1在Label中）的边数": len(filtered_interactions),
-    "筛选率(%)": f"{len(filtered_interactions)/len(gene_interactions_df)*100:.1f}" if len(gene_interactions_df) > 0 else "0",
-    "权重最小值": f"{gene_attention.min():.6f}",
-    "权重最大值": f"{gene_attention.max():.6f}",
-    "权重均值": f"{gene_attention.mean():.6f}",
-    "权重中位数": f"{np.median(gene_attention):.6f}",
-    "运行时间(分钟)": f"{run_time:.2f}",
-    "运行时间戳": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    # 移除原始TSV路径字段
-    "筛选TSV路径": str(filtered_tsv_path)
+    "Model name": "geneformer",
+    "Model version": MODEL_VERSION,
+    "Data type": data_type,
+    "Dataset name": dataset,
+    "Raw data shape (cells x genes)": str(adata_original_shape),
+    "Total genes after transpose": len(gene_symbols),
+    "Matched genes in dictionary": matched_count,
+    "Gene dictionary match rate (%)": f"{matched_count/len(gene_symbols)*100:.1f}",
+    "Cell count before QC": adata_pre_qc_n_obs,
+    "Gene count before QC": adata_pre_qc_n_vars,
+    "Cell count after QC": adata.n_obs,
+    "Gene count after QC": adata.n_vars,
+    "Dataset size after tokenization": tokenized_size,
+    "Final genes used by the model": n_final_genes,
+    "Model device": str(device),
+    "Total extracted gene pairs": len(gene_interactions_df),
+    "Total extracted edges": len(gene_interactions_df),
+    "Gene1 count in labels": len(target_gene1_list),
+    "Filtered edges with Gene1 in labels": len(filtered_interactions),
+    "Filtering rate (%)": f"{len(filtered_interactions)/len(gene_interactions_df)*100:.1f}" if len(gene_interactions_df) > 0 else "0",
+    "Min": f"{gene_attention.min():.6f}",
+    "Max": f"{gene_attention.max():.6f}",
+    "Mean": f"{gene_attention.mean():.6f}",
+    "Median weight": f"{np.median(gene_attention):.6f}",
+    "Runtime (minutes)": f"{run_time:.2f}",
+    "Run timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    # TSV path
+    "Filtered TSV path": str(filtered_tsv_path)
 }
 
-# 转换为DataFrame并追加到总CSV
+# Append parameters to the summary CSV
 params_df = pd.DataFrame([params])
 if ALL_PARAMS_CSV.exists():
     params_df.to_csv(ALL_PARAMS_CSV, mode='a', header=False, index=False, encoding="utf-8")
 else:
     params_df.to_csv(ALL_PARAMS_CSV, mode='w', header=True, index=False, encoding="utf-8")
 
-print(f"✓ 参数已追加到总文件: {ALL_PARAMS_CSV}")
+print(f"[INFO] Parameters appended to: {ALL_PARAMS_CSV}")
 
-# ========== 清理临时文件 ==========
+# ========== Clean temporary files ==========
 print("\n" + "="*60)
-print("9️⃣ 清理临时文件")
+print("[STEP 9] Clean temporary files")
 print("="*60)
 
 import shutil
-# 删除临时Loom文件
+# Remove temporary loom file
 if loom_path.exists():
     os.remove(loom_path)
-    print(f"✓ 删除临时Loom文件: {loom_path}")
+    print(f"[INFO] Removed temporary loom file: {loom_path}")
 
-# 删除临时tokenized目录
+# Remove temporary tokenized directory
 if TEMP_TOKENIZED_DIR.exists():
     shutil.rmtree(TEMP_TOKENIZED_DIR)
-    print(f"✓ 删除临时Tokenized目录: {TEMP_TOKENIZED_DIR}")
+    print(f"[INFO] Removed temporary tokenized directory: {TEMP_TOKENIZED_DIR}")
 
-# 删除临时预处理目录（如果为空）
+# Remove the temporary preprocessing directory if empty
 if TEMP_PREPROCESSED_DIR.exists() and not any(TEMP_PREPROCESSED_DIR.iterdir()):
     os.rmdir(TEMP_PREPROCESSED_DIR)
-    # 尝试删除上级临时目录（如果为空）
+    # Try removing the parent temporary directory if empty
     temp_parent = TEMP_PREPROCESSED_DIR.parent
     if temp_parent.exists() and not any(temp_parent.iterdir()):
         os.rmdir(temp_parent)
-    print(f"✓ 删除临时预处理目录: {TEMP_PREPROCESSED_DIR}")
+    print(f"[INFO] Removed temporary preprocessing directory: {TEMP_PREPROCESSED_DIR}")
 
-# ========== 最终统计报告 ==========
+# ========== Final summary ==========
 print("\n" + "="*80)
-print("📊 最终统计报告")
+print("[INFO] Final statistics")
 print("="*80)
-print(f"任务: {MODEL_NAME} | {data_type} | {dataset}")
-print(f"\n核心统计:")
-print(f"  有效基因数: {n_final_genes}")
-print(f"  处理细胞数: {num_cells_processed}")
-print(f"  原始交互记录数: {len(gene_interactions_df)} (未保存)")
-print(f"  筛选后交互记录数: {len(filtered_interactions)}")
-print(f"  筛选保留比例: {len(filtered_interactions)/len(gene_interactions_df)*100:.2f}%" if len(gene_interactions_df) > 0 else "0%")
-print(f"  运行时间: {run_time:.2f}分钟")
-print(f"\n输出文件:")
-print(f"  - 筛选TSV: {filtered_tsv_path.name}")
-print(f"  - 总参数CSV: {ALL_PARAMS_CSV.name}")
-print("\n✅ 所有处理完成！")
+print(f"Task: {MODEL_NAME} | {data_type} | {dataset}")
+print(f"\nstatistics:")
+print(f"  Valid genes: {n_final_genes}")
+print(f"  : {num_cells_processed}")
+print(f"  : {len(gene_interactions_df)} ()")
+print(f"  : {len(filtered_interactions)}")
+print(f"  : {len(filtered_interactions)/len(gene_interactions_df)*100:.2f}%" if len(gene_interactions_df) > 0 else "0%")
+print(f"  Timestamp: {run_time:.2f}")
+print(f"\n:")
+print(f"  - TSV: {filtered_tsv_path.name}")
+print(f"  - CSV: {ALL_PARAMS_CSV.name}")
+print("\n[INFO] All processing completed.")
 print("="*80)

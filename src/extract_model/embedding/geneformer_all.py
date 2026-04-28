@@ -16,7 +16,7 @@ from datetime import datetime
 import argparse
 from pathlib import Path
 
-# -------------------------- 运行时注入（禁止硬编码） --------------------------
+# -------------------------- Runtime-injected values (no hardcoded paths) --------------------------
 ARGS = None
 input_root = None
 output_root = None
@@ -53,9 +53,9 @@ def load_geneformer_embedding_df(model_dir: Path, dict_dir: Path) -> pd.DataFram
     gene_emb_df_local = gene_emb_df_local.dropna(subset=["Symbol"]).reset_index(drop=True)
     return gene_emb_df_local
 
-# -------------------------- 工具函数 --------------------------
+# --------------------------  --------------------------
 def extract_dataset_name(file_path):
-    """提取纯数据集名（移除CHIP/Non_CHIP/STRING后缀）"""
+    """Extract the normalized dataset name by removing the CHIP/Non_CHIP/STRING suffix."""
     file_basename = os.path.basename(file_path)
     if "_chip_matched-ExpressionData.csv" in file_basename:
         dataset_name = file_basename.split('_chip_matched-ExpressionData.csv')[0]
@@ -65,54 +65,54 @@ def extract_dataset_name(file_path):
         dataset_name = file_basename.split('-ExpressionData.csv')[0]
     return dataset_name
 
-# -------------------------- 单文件对处理函数（输出全量双向边） --------------------------
-def process_single_pair(expr_path, network_path):
-    # 1. 提取纯数据集名称
+# -------------------------- Single-file processing function (export all directed edges) --------------------------
+def process_single_pair(expr_path):
+    # 1. Extract the normalized dataset name
     dataset_name = extract_dataset_name(expr_path)
     print(f"\n=====================================")
-    print(f"🔍 处理数据集：{dataset_name}")
-    print(f"   Expr文件：{expr_path}")
+    print(f"[INFO] Processing dataset: {dataset_name}")
+    print(f"   Expr:{expr_path}")
 
-    # 2. 读取ExpressionData
+    # 2. ExpressionData
     try:
         data_df = pd.read_csv(expr_path)
         gene_symbols = data_df.iloc[1:, 0].tolist()
         gene_set_df = pd.DataFrame({"Symbol": gene_symbols}).dropna()
         input_genes_count = len(gene_set_df)
-        print(f"✅ 参考基因集：{input_genes_count}个基因")
+        print(f"[INFO] Input genes: {input_genes_count}")
     except Exception as e:
-        print(f"⚠️ 读取Expr文件失败：{e} → 跳过该文件对")
+        print(f"[WARN] Failed to read expression file: {e}; skip this dataset.")
         return
 
-    # 3. 匹配Geneformer嵌入
+    # 3. Geneformer
     gene_emb_filtered = pd.merge(gene_set_df, gene_emb_df, on="Symbol", how="inner")
     matched_genes_count = len(gene_emb_filtered)
     if matched_genes_count == 0:
-        print(f"⚠️ 基因无匹配 → 跳过")
+        print("[WARN] No matched genes; skip.")
         return
-    print(f"✅ 匹配到的基因：{matched_genes_count}个")
+    print(f"[INFO] Matched genes: {matched_genes_count}")
 
-    # 4. 计算余弦相似度（输出全量双向边）
+    # 4. Compute cosine similarity and export all directed edges
     def save_similarity_tsv():
-        # 提取嵌入矩阵
+        # 
         embedding_cols = [col for col in gene_emb_filtered.columns if col not in ["Symbol", "ENSG_ID"]]
         embedding_matrix = gene_emb_filtered[embedding_cols].values
         emb_dim = len(embedding_cols)
 
         if embedding_matrix.size == 0:
-            print(f"⚠️ 嵌入矩阵为空 → 跳过保存")
+            print("[WARN] Empty embedding matrix; skip saving.")
             return None
         
-        # 计算相似度矩阵（无向，对称）
+        # Compute the symmetric similarity matrix
         similarity_matrix = cosine_similarity(embedding_matrix)
         gene_names = gene_emb_filtered["Symbol"].tolist()
         
-        # 核心修改：遍历所有i≠j的组合，生成双向边（A→B + B→A）
+        # :i≠j,Generated(A→B + B→A)
         edge_weights = []
         n_genes = len(gene_names)
         for i in range(n_genes):
             for j in range(n_genes):
-                if i == j:  # 仅过滤自环，保留所有双向边
+                if i == j:  # Remove self-loops only and keep all directed edges
                     continue
                 edge_weights.append({
                     'Gene1': gene_names[i],
@@ -122,44 +122,44 @@ def process_single_pair(expr_path, network_path):
         
         total_edges = len(edge_weights)
         if total_edges == 0:
-            print(f"⚠️ 无有效基因对 → 跳过保存")
+            print("[WARN] No valid gene pairs; skip saving.")
             return None
 
-        # 保存TSV：模型_数据集.tsv
+        # Save the TSV as <model>_<dataset>.tsv
         tsv_filename = f"Geneformer_{dataset_name}.tsv"
         tsv_path = os.path.join(output_root, tsv_filename)
         
-        # 按EdgeWeight降序排序（保留所有边）
+        # Sort by EdgeWeight in descending order while keeping all edges
         edges_df = pd.DataFrame(edge_weights)
         edges_df = edges_df.sort_values(by="EdgeWeight", ascending=False)
         edges_df.to_csv(tsv_path, sep='\t', index=False)
 
-        # 统计信息
+        # 
         avg_weight = np.mean([ew['EdgeWeight'] for ew in edge_weights]) if total_edges > 0 else 0.0
-        print(f"\n📈 结果统计：")
-        print(f"   总生成边（双向）：{total_edges} | 平均权重：{avg_weight:.4f}")
-        print(f"✅ TSV已保存：{tsv_path}")
+        print("\n[INFO] Result summary")
+        print(f"   Total directed edges: {total_edges} | Mean weight: {avg_weight:.4f}")
+        print(f"[INFO] TSV saved: {tsv_path}")
         return tsv_path
 
-    # 执行保存
+    # 
     save_result = save_similarity_tsv()
     if save_result is None:
         return
 
-    # 5. 记录运行信息
+    # 5. 
     record = {
-        "时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "模型": "Geneformer",
-        "数据集": dataset_name,
-        "输入基因数": input_genes_count,
-        "匹配基因数": matched_genes_count,
-        "总双向边数": len(pd.read_csv(save_result)),
-        "TSV路径": save_result
+        "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "Model": "Geneformer",
+        "Dataset": dataset_name,
+        "Input gene count": input_genes_count,
+        "Matched gene count": matched_genes_count,
+        "Total directed edge count": len(pd.read_csv(save_result)),
+        "TSV path": save_result
     }
-    record_csv = os.path.join(output_root, "Geneformer运行记录.csv")
+    record_csv = os.path.join(output_root, "Geneformerrun_records.csv")
     pd.DataFrame([record]).to_csv(record_csv, mode='a', header=not os.path.exists(record_csv), index=False)
 
-# -------------------------- 批量遍历 --------------------------
+# --------------------------  --------------------------
 def main():
     global ARGS, input_root, output_root, gene_emb_df
     ARGS = parse_args()
@@ -168,28 +168,21 @@ def main():
     os.makedirs(output_root, exist_ok=True)
 
     gene_emb_df = load_geneformer_embedding_df(model_dir=Path(ARGS.model_dir), dict_dir=Path(ARGS.dict_dir))
-    print("✅ 初始化完成：模型、字典、嵌入已加载")
+    print("[INFO] Initialization complete: model, dicts, and embeddings loaded.")
 
     target_folders = ARGS.folders
     for folder in target_folders:
         folder_path = os.path.join(input_root, folder)
         if not os.path.exists(folder_path):
-            print(f"⚠️ 文件夹不存在：{folder_path} → 跳过")
+            print(f"[WARN] Folder not found: {folder_path}; skip.")
             continue
 
         expr_files = [f for f in os.listdir(folder_path) if f.endswith('-ExpressionData.csv')]
         for expr_file in expr_files:
             expr_path = os.path.join(folder_path, expr_file)
-            network_file = expr_file.replace('-ExpressionData.csv', '-network.csv')
-            network_path = os.path.join(folder_path, network_file)
-            
-            if not os.path.exists(network_path):
-                print(f"⚠️ 缺失Network文件：{network_path} → 跳过{expr_file}")
-                continue
-            
-            process_single_pair(expr_path, network_path)
+            process_single_pair(expr_path)
 
 if __name__ == "__main__":
     main()
     print("\n=====================================")
-    print(f"🎉 所有文件处理完成！结果保存在：{output_root}")
+    print(f"[INFO] All files processed. Outputs saved in: {output_root}")

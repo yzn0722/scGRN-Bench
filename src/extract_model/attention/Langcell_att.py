@@ -1,6 +1,6 @@
 """
-LangCell Attention提取 - 批量处理版（支持CHIP/Non_CHIP/STRING）
-统一输出格式，参数汇总到单个CSV，支持批量运行
+LangCell Attention - (CHIP/Non_CHIP/STRING)
+,CSV,
 """
 
 import os
@@ -25,35 +25,35 @@ import shutil
 warnings.filterwarnings("ignore")
 os.environ["KMP_WARNINGS"] = "off"
 
-# ==================== 接收命令行参数 ====================
+# ====================  ====================
 if len(sys.argv) != 3:
-    print("用法: python langcell_attention_batch.py <数据类型> <数据集名称>")
-    print("例如: python langcell_attention_batch.py CHIP hESC")
+    print(": python langcell_attention_batch.py <> <Dataset>")
+    print(": python langcell_attention_batch.py CHIP hESC")
     print("      python langcell_attention_batch.py Non_CHIP hHep")
     print("      python langcell_attention_batch.py STRING mHSC-E")
     sys.exit(1)
 
-data_type = sys.argv[1]  # 数据类型：CHIP / Non_CHIP / STRING
-dataset = sys.argv[2]    # 数据集名称：hESC、hHep等
+data_type = sys.argv[1]  # :CHIP / Non_CHIP / STRING
+dataset = sys.argv[2]    # Dataset:hESC/hHep
 MODEL_NAME = "LangCell"
-USE_MEDIAN_FILTER = False  # 固定禁用median过滤（保持原配置）
+USE_MEDIAN_FILTER = False  # median()
 BATCH_SIZE = 8
 DEVICE = "cuda"
 TARGET_LAYER = -1
 
-# 校验数据类型
+# 
 valid_data_types = ["CHIP", "Non_CHIP", "STRING"]
 if data_type not in valid_data_types:
-    raise ValueError(f"不支持的数据类型: {data_type}（仅支持{valid_data_types}）")
+    raise ValueError(f": {data_type}({valid_data_types})")
 
-# ==================== 路径配置（动态适配类型+数据集）====================
-# 根路径配置
+# ==================== (+Dataset)====================
+# 
 MODEL_PATH = "/mnt/md0/yzn/scFM-Bench-main/data/weights/LangCell"
 VOCAB_PATH = "/mnt/md0/yzn/scFM-Bench-main/data/weights/Geneformer/dicts"
 INPUT_ROOT = "/mnt/md0/yzn/Beeline-master/benchmark_SF/input_process1000"
 OUTPUT_ROOT = Path("/mnt/md0/yzn/Beeline-master/benchmark_SF/model/output_att1000/langcell")
 
-# 根据类型确定输入路径和文件后缀
+# 
 if data_type == "CHIP":
     file_suffix = "_chip_matched"
     input_subdir = "CHIP"
@@ -61,35 +61,35 @@ elif data_type == "Non_CHIP" or data_type == "STRING":
     file_suffix = "_processed"
     input_subdir = data_type
 
-# 输入文件路径（动态拼接）
+# ()
 csv_path = Path(f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv")
 network_path = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
-# 输出路径（按类型分目录）
+# ()
 TYPE_OUTPUT_DIR = OUTPUT_ROOT / data_type
 TYPE_OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 
-# 临时文件路径（含类型+数据集标识，避免冲突）
+# (+Dataset,)
 TEMP_DIR = OUTPUT_ROOT / "temp" / f"{data_type}_{dataset}"
 TEMP_DIR.mkdir(exist_ok=True, parents=True)
 
-# 输出文件命名（统一规范：模型-类型-数据集-文件名）
+# (:Model--Dataset-)
 file_prefix = f"langcell-{data_type}-{dataset}-att"
 interactions_tsv_path = TYPE_OUTPUT_DIR / f"{file_prefix}.tsv"
 
-# 总参数CSV文件（所有任务共用）
+# CSV()
 ALL_PARAMS_CSV = OUTPUT_ROOT / "langcell-all-params.csv"
 
 print("="*80)
-print(f"📌 任务配置：{MODEL_NAME} | {data_type} | {dataset}")
+print(f"[INFO] Task config: {MODEL_NAME} | {data_type} | {dataset}")
 print("="*80)
-print(f"模型路径: {MODEL_PATH}")
-print(f"词汇表路径: {VOCAB_PATH}")
-print(f"输入表达数据: {csv_path}")
-print(f"输入网络数据: {network_path}")
-print(f"输出目录: {TYPE_OUTPUT_DIR}")
-print(f"总参数文件: {ALL_PARAMS_CSV}")
-print(f"临时目录: {TEMP_DIR}")
+print(f"Model: {MODEL_PATH}")
+print(f"Vocabulary: {VOCAB_PATH}")
+print(f": {csv_path}")
+print(f": {network_path}")
+print(f": {TYPE_OUTPUT_DIR}")
+print(f": {ALL_PARAMS_CSV}")
+print(f": {TEMP_DIR}")
 print("="*80)
 
 # ==================== Model Components ====================
@@ -210,97 +210,97 @@ class LangCellAttentionExtractor:
         self.reference_genes = None
         self.reference_gene1_count = 0
         
-        # 统计参数存储字典（最终写入总CSV）
+        # (CSV)
         self.stats = {
-            "模型名称": MODEL_NAME,
-            "数据类型": data_type,
-            "数据集名称": dataset,
-            "模型路径": MODEL_PATH,
-            "词汇表路径": VOCAB_PATH,
-            "输入表达数据路径": str(csv_path),
-            "输入网络数据路径": network_path,
-            "使用Median过滤": USE_MEDIAN_FILTER,
-            "目标注意力层": TARGET_LAYER,
+            "Model": MODEL_NAME,
+            "": data_type,
+            "Dataset": dataset,
+            "Model": MODEL_PATH,
+            "Vocabulary": VOCAB_PATH,
+            "": str(csv_path),
+            "": network_path,
+            "Median": USE_MEDIAN_FILTER,
+            "": TARGET_LAYER,
             "Batch Size": BATCH_SIZE,
-            "模型加载设备": str(self.device),
-            "运行时间戳": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "Model": str(self.device),
+            "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         
-        # 加载参考网络
+        # 
         self._load_reference_network()
         print(f"Using device: {self.device}")
         if not USE_MEDIAN_FILTER:
-            print("⚠️  Median filtering disabled - will keep all non-zero expressed genes")
+            print("[WARN] Median filtering disabled - keep all non-zero expressed genes")
         if self.reference_genes:
-            print(f"参考网络Gene1唯一基因数: {self.reference_gene1_count}")
-        self.stats["Label中Gene1数量"] = self.reference_gene1_count
+            print(f"Gene1: {self.reference_gene1_count}")
+        self.stats["LabelGene1"] = self.reference_gene1_count
 
     def _load_reference_network(self):
-        """加载对照网络，只获取Gene1列的唯一基因"""
+        """,Gene1"""
         try:
             if not os.path.exists(network_path):
-                print(f"⚠️  参考网络文件不存在: {network_path}")
+                print(f"[WARN] Reference network file not found: {network_path}")
                 return
             
             df_ref = pd.read_csv(network_path)
-            print(f"参考网络形状: {df_ref.shape}")
+            print(f": {df_ref.shape}")
             
             if 'Gene1' not in df_ref.columns:
-                raise ValueError("参考网络缺少Gene1列")
+                raise ValueError("Gene1")
             
             self.reference_genes = set(df_ref['Gene1'].unique())
             self.reference_genes = {gene.strip() for gene in self.reference_genes if pd.notna(gene)}
             self.reference_gene1_count = len(self.reference_genes)
-            print(f"参考网络Gene1列提取到 {self.reference_gene1_count} 个唯一基因")
+            print(f"Gene1 {self.reference_gene1_count} ")
         
         except Exception as e:
-            print(f"⚠️  加载参考网络失败: {str(e)}")
-            print("   将输出所有基因对（不按参考网络筛选）")
+            print(f"[WARN] Failed to load reference network: {str(e)}")
+            print("   ()")
             self.reference_genes = None
             self.reference_gene1_count = 0
 
     def load_vocab(self):
         """Load vocabulary and gene mappings"""
         print("\n" + "="*60)
-        print("1️⃣ 加载词汇表和基因映射")
+        print("[STEP 1] Load vocabulary and gene mapping")
         print("="*60)
         
-        # Load token dictionary - 修复：使用全局VOCAB_PATH
+        # Load token dictionary - :VOCAB_PATH
         with open(os.path.join(VOCAB_PATH, "token_dictionary.pkl"), "rb") as f:
             self.vocab = pickle.load(f)
         
         self.pad_token_id = self.vocab.get("<pad>")
         self.vocab_size = len(self.vocab)
         
-        # Load gene name to ID mapping - 修复：使用全局VOCAB_PATH
+        # Load gene name to ID mapping - :VOCAB_PATH
         with open(os.path.join(VOCAB_PATH, "gene_name_id_dict.pkl"), "rb") as f:
             self.gene_name_id = pickle.load(f)
         
         self.id2name = {v: k for k, v in self.gene_name_id.items()}
         
-        # Load gene median dictionary - 修复：使用全局VOCAB_PATH
+        # Load gene median dictionary - :VOCAB_PATH
         with open(os.path.join(VOCAB_PATH, "gene_median_dictionary.pkl"), "rb") as f:
             self.gene_median_dict = pickle.load(f)
         
         self.gene_keys = list(self.gene_median_dict.keys())
         self.genelist_dict = dict(zip(self.gene_keys, [True] * len(self.gene_keys)))
         
-        print(f"词汇表大小: {self.vocab_size}")
-        print(f"基因名称-ID映射数: {len(self.gene_name_id)}")
-        self.stats["基因字典总数量"] = len(self.gene_name_id)
+        print(f"Vocabulary: {self.vocab_size}")
+        print(f"-ID: {len(self.gene_name_id)}")
+        self.stats[""] = len(self.gene_name_id)
 
     def load_model(self):
         """Load pretrained LangCell model"""
         print("\n" + "="*60)
-        print("2️⃣ 加载LangCell模型")
+        print("[STEP 2] Load LangCell model")
         print("="*60)
         
-        # Load cell encoder (BERT) - 修复：使用全局MODEL_PATH
+        # Load cell encoder (BERT) - :MODEL_PATH
         self.model = BertModel.from_pretrained(
             os.path.join(MODEL_PATH, "cell_bert")
         )
         
-        # Load cell pooler - 修复：使用全局MODEL_PATH
+        # Load cell pooler - :MODEL_PATH
         self.cell_pooler = Pooler(
             self.model.config,
             proj_dim=256,
@@ -312,17 +312,17 @@ class LangCellAttentionExtractor:
         self.model.eval()
         
         total_params = sum(p.numel() for p in self.model.parameters())
-        print(f"模型加载完成，总参数量: {total_params/1e6:.1f}M")
-        self.stats["模型总参数量(M)"] = f"{total_params/1e6:.1f}"
+        print(f"Model,: {total_params/1e6:.1f}M")
+        self.stats["Model(M)"] = f"{total_params/1e6:.1f}"
 
     def load_csv_data(self):
         """Load gene expression data from CSV"""
         print("\n" + "="*60)
-        print("3️⃣ 加载表达数据")
+        print("[STEP 3] Load expression data")
         print("="*60)
         
         if not csv_path.exists():
-            raise FileNotFoundError(f"表达数据文件不存在: {csv_path}")
+            raise FileNotFoundError(f"does not exist: {csv_path}")
         
         # Read CSV
         df = pd.read_csv(csv_path, index_col=0)
@@ -331,10 +331,10 @@ class LangCellAttentionExtractor:
         original_cell_count = df.shape[0]
         original_possible_gene_pairs = original_gene_count * (original_gene_count - 1)
         
-        print(f"数据形状 (细胞×基因): {df.shape}")
-        print(f"原始细胞数: {original_cell_count}")
-        print(f"原始基因数: {original_gene_count}")
-        print(f"原始可能基因对（排除自环）: {original_possible_gene_pairs:,}")
+        print(f" (×): {df.shape}")
+        print(f": {original_cell_count}")
+        print(f": {original_gene_count}")
+        print(f"(): {original_possible_gene_pairs:,}")
         
         # Create AnnData object
         adata = sc.AnnData(X=df.values)
@@ -343,21 +343,21 @@ class LangCellAttentionExtractor:
         adata.obs['condition'] = 'condition_1'
         
         self.adata = adata
-        self.stats["原始数据形状（细胞×基因）"] = str(df.shape)
-        self.stats["原始细胞数"] = original_cell_count
-        self.stats["原始基因数"] = original_gene_count
-        self.stats["原始可能基因对"] = original_possible_gene_pairs
+        self.stats["(×)"] = str(df.shape)
+        self.stats[""] = original_cell_count
+        self.stats[""] = original_gene_count
+        self.stats[""] = original_possible_gene_pairs
 
     def map_genes_to_vocab(self):
         """Map gene names to vocabulary IDs"""
         print("\n" + "="*60)
-        print("4️⃣ 基因与词汇表匹配")
+        print("[STEP 4] Match genes to vocabulary")
         print("="*60)
         
         gene_names = self.adata.var_names.tolist()
         original_gene_count = len(gene_names)
         
-        # 匹配基因到Ensembl ID
+        # Ensembl ID
         ensembl_ids = []
         valid_genes = []
         
@@ -369,7 +369,7 @@ class LangCellAttentionExtractor:
                 ensembl_ids.append(gene_name)
                 valid_genes.append(True)
             else:
-                # 不区分大小写匹配
+                # 
                 found = False
                 for symbol, ens_id in self.gene_name_id.items():
                     if symbol.upper() == gene_name.upper():
@@ -387,32 +387,32 @@ class LangCellAttentionExtractor:
         n_valid = sum(valid_genes)
         mapped_percentage = (n_valid / original_gene_count) * 100 if original_gene_count > 0 else 0
         
-        print(f"匹配到词汇表的基因数: {n_valid}/{original_gene_count} ({mapped_percentage:.1f}%)")
+        print(f"Vocabulary: {n_valid}/{original_gene_count} ({mapped_percentage:.1f}%)")
         
-        # 显示未匹配基因示例
+        # 
         unmapped = [gene_names[i] for i, v in enumerate(valid_genes) if not v]
         if unmapped:
-            print(f"未匹配基因示例（前5个）: {unmapped[:5]}")
+            print(f"(5): {unmapped[:5]}")
         
         if n_valid == 0:
-            raise ValueError("没有基因匹配到词汇表！请检查基因名称格式")
+            raise ValueError("Vocabulary!")
         
-        # 过滤有效基因
+        # 
         self.adata = self.adata[:, self.adata.var['valid_gene']]
-        print(f"匹配后数据形状: {self.adata.shape}")
+        print(f": {self.adata.shape}")
         
-        self.stats["基因字典匹配数"] = n_valid
-        self.stats["基因字典匹配率(%)"] = f"{mapped_percentage:.1f}"
-        self.stats["匹配后基因数"] = self.adata.shape[1]
-        self.stats["匹配后细胞数"] = self.adata.shape[0]
+        self.stats[""] = n_valid
+        self.stats["(%)"] = f"{mapped_percentage:.1f}"
+        self.stats[""] = self.adata.shape[1]
+        self.stats[""] = self.adata.shape[0]
 
     def tokenize_data(self):
         """Tokenize gene expression data"""
         print("\n" + "="*60)
-        print("5️⃣ 数据Tokenization")
+        print("[STEP 5] Tokenization")
         print("="*60)
         
-        # 进一步过滤不在词汇表中的基因
+        # Vocabulary
         valid_genes_mask = []
         for eid in self.adata.var['ensembl_id']:
             valid_genes_mask.append(eid in self.vocab)
@@ -421,32 +421,32 @@ class LangCellAttentionExtractor:
         n_invalid = (~valid_genes_mask).sum()
         
         if n_invalid > 0:
-            print(f"过滤掉 {n_invalid} 个不在词汇表中的基因")
+            print(f" {n_invalid} Vocabulary")
         
-        # 最终过滤
+        # 
         self.adata = self.adata[:, valid_genes_mask]
         filtered_gene_count = self.adata.shape[1]
-        filtered_percentage = (filtered_gene_count / self.stats["原始基因数"]) * 100 if self.stats["原始基因数"] > 0 else 0
+        filtered_percentage = (filtered_gene_count / self.stats[""]) * 100 if self.stats[""] > 0 else 0
         
-        print(f"最终数据形状: {self.adata.shape}")
-        print(f"最终基因数: {filtered_gene_count} ({filtered_percentage:.1f}% of original)")
+        print(f": {self.adata.shape}")
+        print(f": {filtered_gene_count} ({filtered_percentage:.1f}% of original)")
         
         if self.adata.shape[1] == 0:
-            raise ValueError("没有基因保留在词汇表中！")
+            raise ValueError("Vocabulary!")
         
-        # 准备表达数据
+        # 
         X = self.adata.X
         if sparse.issparse(X):
             X = X.toarray()
         
-        # 获取基因ID
+        # ID
         gene_ids = np.array([self.vocab[eid] for eid in self.adata.var['ensembl_id']])
         
-        # 统计在median字典中的基因数
+        # median
         genes_in_median_dict = sum([1 for gid in gene_ids if gid in self.gene_median_dict])
-        print(f"在median字典中的基因数: {genes_in_median_dict}/{len(gene_ids)}")
+        print(f"median: {genes_in_median_dict}/{len(gene_ids)}")
         
-        # Tokenize每个细胞
+        # Tokenize
         tokenized_cells = []
         token_counts = []
         for i in tqdm(range(X.shape[0]), desc="Tokenizing cells"):
@@ -461,29 +461,29 @@ class LangCellAttentionExtractor:
             })
             token_counts.append(len(tokens))
         
-        # 整理tokenized数据
+        # tokenized
         self.tokenized_data = {
             'input_ids': [c['input_ids'] for c in tokenized_cells],
             'sorted_indices': [c['sorted_indices'] for c in tokenized_cells]
         }
         
-        # Token统计
+        # Token
         token_counts = np.array(token_counts)
-        print(f"Tokenization完成，共处理 {len(self.tokenized_data['input_ids'])} 个细胞")
-        print(f"Token统计:")
-        print(f"  平均每个细胞Token数: {token_counts.mean():.1f}")
-        print(f"  中位数Token数: {np.median(token_counts):.1f}")
-        print(f"  最小Token数: {token_counts.min()}")
-        print(f"  最大Token数: {token_counts.max()}")
+        print(f"Tokenization, {len(self.tokenized_data['input_ids'])} ")
+        print(f"Token:")
+        print(f"  Token: {token_counts.mean():.1f}")
+        print(f"  Token: {np.median(token_counts):.1f}")
+        print(f"  Token: {token_counts.min()}")
+        print(f"  Token: {token_counts.max()}")
         
-        self.stats["Tokenization后细胞数"] = len(self.tokenized_data['input_ids'])
-        self.stats["最终用于模型的基因数"] = filtered_gene_count
-        self.stats["平均每个细胞Token数"] = f"{token_counts.mean():.1f}"
+        self.stats["Tokenization"] = len(self.tokenized_data['input_ids'])
+        self.stats["Model"] = filtered_gene_count
+        self.stats["Token"] = f"{token_counts.mean():.1f}"
 
     def create_dataloader(self):
         """Create DataLoader for batched inference"""
         print("\n" + "="*60)
-        print("6️⃣ 创建DataLoader")
+        print("[STEP 6] Build dataloader")
         print("="*60)
         
         dataset = GeneExpressionDataset(self.tokenized_data)
@@ -497,26 +497,26 @@ class LangCellAttentionExtractor:
             num_workers=0
         )
         
-        print(f"DataLoader创建完成，共 {len(self.dataloader)} 个batch")
-        self.stats["DataLoader批次数量"] = len(self.dataloader)
+        print(f"DataLoader, {len(self.dataloader)} batch")
+        self.stats["DataLoader"] = len(self.dataloader)
 
     def extract_attention_weights(self):
         """Extract attention weights from specified layer and save as TSV"""
         print("\n" + "="*60)
-        print(f"7️⃣ 提取注意力权重（Layer {TARGET_LAYER}）")
+        print(f"[STEP 7] Extract attention (layer {TARGET_LAYER})")
         print("="*60)
         
-        # 基因信息
+        # 
         ori_gene_names = [name.strip() for name in self.adata.var_names.tolist()]
         filtered_gene_count = len(ori_gene_names)
-        print(f"处理基因数: {filtered_gene_count}")
+        print(f": {filtered_gene_count}")
         
-        # 初始化统计
+        # 
         dict_sum_condition = {}
         processed_cell_count = 0
         condition_ids = np.array(self.adata.obs["condition"].tolist())
         
-        # 记录开始时间
+        # Timestamp
         start_time = datetime.now()
         
         with torch.no_grad():
@@ -524,7 +524,7 @@ class LangCellAttentionExtractor:
                 input_ids = batch_data['input_ids'].to(self.device)
                 attention_mask = batch_data['attention_mask'].to(self.device)
                 
-                # 前向传播
+                # 
                 outputs = self.model(
                     input_ids,
                     attention_mask,
@@ -534,7 +534,7 @@ class LangCellAttentionExtractor:
                 attn_scores = outputs.attentions[TARGET_LAYER]  # [batch, heads, seq, seq]
                 num_heads = attn_scores.size(1)
                 
-                # 移除CLS token
+                # CLS token
                 if self.add_cls:
                     attn_scores = attn_scores[..., 1:, 1:]
                     batch_data["sorted_indices"] = batch_data["sorted_indices"][:, 1:]
@@ -542,57 +542,57 @@ class LangCellAttentionExtractor:
                 
                 M = attn_scores.shape[-1]
                 if M == 0:
-                    print(f"⚠️  空注意力矩阵，跳过该batch")
+                    print("[WARN] Empty attention matrix, skip this batch")
                     continue
                 
-                # 检查NaN/Inf
+                # NaN/Inf
                 if torch.isnan(attn_scores).any() or torch.isinf(attn_scores).any():
-                    print(f"⚠️  注意力分数包含NaN/Inf，跳过该batch")
+                    print("[WARN] Attention scores contain NaN/Inf, skip this batch")
                     continue
                 
-                # 行Rank归一化
+                # Rank
                 attn_scores = attn_scores.reshape((-1, M))
                 order = torch.argsort(attn_scores, dim=1)
                 rank = torch.argsort(order, dim=1)
                 attn_scores = rank.reshape((-1, num_heads, M, M)).float() / M
                 
-                # 列Rank归一化
+                # Rank
                 attn_scores = attn_scores.permute(0, 1, 3, 2).reshape((-1, M))
                 order = torch.argsort(attn_scores, dim=1)
                 rank = torch.argsort(order, dim=1)
                 attn_scores = (rank.reshape((-1, num_heads, M, M)).float() / M).permute(0, 1, 3, 2)
                 
-                # 平均注意力头
+                # 
                 attn_scores = attn_scores.mean(1)
                 
-                # 恢复基因顺序
+                # 
                 sorted_indices = batch_data["sorted_indices"].to(attn_scores.device)
                 attn_scores = reverse_permute(attn_scores, sorted_indices)
                 
-                # 转换为numpy
+                # numpy
                 attn_scores_np = attn_scores.cpu().numpy()
                 sorted_indices_np = sorted_indices.cpu().numpy()
                 
-                # 应用mask
+                # mask
                 mask_2d = attention_mask.cpu().numpy()[:, 1:] if self.add_cls else attention_mask.cpu().numpy()
                 mask_matrix = mask_2d[:, :, None] * mask_2d[:, None, :]
                 attn_scores_np = attn_scores_np * mask_matrix
                 
-                # 映射到完整基因空间
+                # 
                 batch_size_curr = attn_scores_np.shape[0]
                 n_genes = filtered_gene_count
                 full_attn = np.zeros((batch_size_curr, n_genes, n_genes), dtype=np.float32)
                 
                 for b in range(batch_size_curr):
                     indices = sorted_indices_np[b]
-                    indices = np.clip(indices, 0, n_genes - 1)  # 防止索引越界
+                    indices = np.clip(indices, 0, n_genes - 1)  # 
                     
                     for i, idx_i in enumerate(indices):
                         for j, idx_j in enumerate(indices):
                             if 0 <= idx_i < n_genes and 0 <= idx_j < n_genes:
                                 full_attn[b, idx_i, idx_j] = attn_scores_np[b, i, j]
                 
-                # 累加
+                # 
                 batch_idx_np = batch_data["idx"].numpy()
                 batch_conditions = condition_ids[batch_idx_np]
                 
@@ -604,24 +604,24 @@ class LangCellAttentionExtractor:
                 
                 processed_cell_count += batch_size_curr
                 
-                # 清理显存
+                # 
                 del outputs, attn_scores, input_ids, attention_mask
                 torch.cuda.empty_cache()
         
-        # 计算运行时间
+        # Timestamp
         end_time = datetime.now()
         run_time = (end_time - start_time).total_seconds() / 60
-        print(f"\n注意力提取完成，共处理 {processed_cell_count} 个细胞")
-        print(f"运行时间: {run_time:.2f} 分钟")
+        print(f"\n, {processed_cell_count} ")
+        print(f"Timestamp: {run_time:.2f} ")
         
-        self.stats["处理细胞数"] = processed_cell_count
-        self.stats["运行时间(分钟)"] = f"{run_time:.2f}"
+        self.stats[""] = processed_cell_count
+        self.stats["Timestamp()"] = f"{run_time:.2f}"
         
-        # 平均注意力权重
+        # 
         if not dict_sum_condition:
-            raise ValueError("没有提取到有效注意力权重")
+            raise ValueError("")
         
-        # 处理每个condition（默认只有一个condition）
+        # condition(condition)
         tsv_gene_pair_count = 0
         covered_reference_gene1_count = 0
         attention_matrix = None
@@ -629,49 +629,49 @@ class LangCellAttentionExtractor:
         for condition, attn_sum in dict_sum_condition.items():
             n_cells_processed = processed_cell_count
             if n_cells_processed == 0:
-                print(f"⚠️  条件 {condition} 没有处理成功的细胞")
+                print(f"[WARN] No successful cells for condition {condition}")
                 continue
             
-            # 平均
+            # 
             attention_matrix = attn_sum / n_cells_processed
-            print(f"\n条件 {condition}:")
-            print(f"  注意力矩阵形状: {attention_matrix.shape}")
-            print(f"  数值范围: [{np.nanmin(attention_matrix):.6f}, {np.nanmax(attention_matrix):.6f}]")
-            print(f"  平均值: {np.nanmean(attention_matrix):.6f}")
-            print(f"  中位数: {np.nanmedian(attention_matrix):.6f}")
+            print(f"\n {condition}:")
+            print(f"  : {attention_matrix.shape}")
+            print(f"  : [{np.nanmin(attention_matrix):.6f}, {np.nanmax(attention_matrix):.6f}]")
+            print(f"  : {np.nanmean(attention_matrix):.6f}")
+            print(f"  : {np.nanmedian(attention_matrix):.6f}")
             
-            # 保存为TSV
+            # TSV
             tsv_info = self._save_attention_as_tsv(attention_matrix, ori_gene_names, condition)
             tsv_gene_pair_count = tsv_info["gene_pair_count"]
             covered_reference_gene1_count = tsv_info["covered_reference_gene1_count"]
         
-        # 更新统计
-        self.stats["提取的总边数"] = tsv_gene_pair_count
-        self.stats["筛选后（Gene1在Label中）的边数"] = tsv_gene_pair_count  # LangCell已在保存时筛选
-        self.stats["筛选率(%)"] = f"100.0" if self.reference_genes else f"{(tsv_gene_pair_count/(filtered_gene_count*(filtered_gene_count-1)))*100:.1f}"
-        self.stats["覆盖参考Gene1基因数"] = covered_reference_gene1_count
-        self.stats["参考Gene1覆盖率(%)"] = f"{(covered_reference_gene1_count/self.reference_gene1_count)*100:.1f}" if self.reference_gene1_count > 0 else "0.0"
-        self.stats["权重最小值"] = f"{np.nanmin(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
-        self.stats["权重最大值"] = f"{np.nanmax(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
-        self.stats["权重均值"] = f"{np.nanmean(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
-        self.stats["权重中位数"] = f"{np.nanmedian(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
-        self.stats["基因关系文件路径"] = str(interactions_tsv_path)
+        # 
+        self.stats[""] = tsv_gene_pair_count
+        self.stats["(Gene1Label)"] = tsv_gene_pair_count  # LangCell
+        self.stats["(%)"] = f"100.0" if self.reference_genes else f"{(tsv_gene_pair_count/(filtered_gene_count*(filtered_gene_count-1)))*100:.1f}"
+        self.stats["Gene1"] = covered_reference_gene1_count
+        self.stats["Gene1(%)"] = f"{(covered_reference_gene1_count/self.reference_gene1_count)*100:.1f}" if self.reference_gene1_count > 0 else "0.0"
+        self.stats[""] = f"{np.nanmin(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
+        self.stats[""] = f"{np.nanmax(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
+        self.stats[""] = f"{np.nanmean(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
+        self.stats[""] = f"{np.nanmedian(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
+        self.stats[""] = str(interactions_tsv_path)
         
         return attention_matrix
 
     def _save_attention_as_tsv(self, attention_matrix, gene_names, condition):
-        """将注意力权重保存为TSV文件（按参考网络筛选）"""
-        print(f"\n8️⃣ 保存TSV文件（条件: {condition}）")
+        """TSV()"""
+        print(f"\n[STEP 8] Save TSV (condition: {condition})")
         
         tsv_data = []
         n_genes = len(gene_names)
         covered_reference_genes = set()
         
-        # 遍历基因对
+        # 
         for i in tqdm(range(n_genes), desc="Preparing TSV data"):
             gene1 = gene_names[i]
             
-            # 按参考网络筛选Gene1
+            # Gene1
             if self.reference_genes and gene1 not in self.reference_genes:
                 continue
             if self.reference_genes:
@@ -679,37 +679,37 @@ class LangCellAttentionExtractor:
             
             for j in range(n_genes):
                 gene2 = gene_names[j]
-                if gene1 == gene2:  # 跳过自环
+                if gene1 == gene2:  # 
                     continue
                 
                 score = attention_matrix[i, j]
-                if score > 0:  # 只保留非零分数
+                if score > 0:  # 
                     tsv_data.append({
                         'Gene1': gene1,
                         'Gene2': gene2,
                         'Attention_score': round(score, 6)
                     })
         
-        # 创建DataFrame并排序
+        # DataFrame
         df_tsv = pd.DataFrame(tsv_data)
         df_tsv = df_tsv.sort_values('Attention_score', ascending=False).reset_index(drop=True)
         
-        # 保存
+        # 
         df_tsv.to_csv(interactions_tsv_path, sep='\t', index=False, header=True)
-        print(f"✅ TSV文件保存至: {interactions_tsv_path}")
+        print(f"[INFO] TSV saved to: {interactions_tsv_path}")
         
-        # 统计
+        # 
         gene_pair_count = len(df_tsv)
         covered_reference_gene1_count = len(covered_reference_genes)
         reference_coverage_percentage = (covered_reference_gene1_count / self.reference_gene1_count) * 100 if self.reference_gene1_count > 0 else 0.0
         
-        print(f"  基因对数量: {gene_pair_count:,}")
-        print(f"  Top 5基因对:")
+        print(f"  : {gene_pair_count:,}")
+        print(f"  Top 5:")
         for _, row in df_tsv.head().iterrows():
             print(f"    {row['Gene1']} - {row['Gene2']}: {row['Attention_score']:.6f}")
         
         if self.reference_genes:
-            print(f"  参考Gene1覆盖数: {covered_reference_gene1_count}/{self.reference_gene1_count} ({reference_coverage_percentage:.1f}%)")
+            print(f"  Gene1: {covered_reference_gene1_count}/{self.reference_gene1_count} ({reference_coverage_percentage:.1f}%)")
         
         return {
             "tsv_path": str(interactions_tsv_path),
@@ -719,53 +719,53 @@ class LangCellAttentionExtractor:
         }
 
     def save_stats_to_csv(self):
-        """将统计参数追加到总CSV文件"""
+        """CSV"""
         print("\n" + "="*60)
-        print("9️⃣ 记录运行参数")
+        print("[STEP 9] Save run parameters")
         print("="*60)
         
-        # 转换为DataFrame
+        # DataFrame
         stats_df = pd.DataFrame([self.stats])
         
-        # 追加到总CSV
+        # CSV
         if ALL_PARAMS_CSV.exists():
             stats_df.to_csv(ALL_PARAMS_CSV, mode='a', header=False, index=False, encoding="utf-8")
-            print(f"✓ 参数已追加到总文件: {ALL_PARAMS_CSV}")
+            print(f"✓ : {ALL_PARAMS_CSV}")
         else:
             stats_df.to_csv(ALL_PARAMS_CSV, mode='w', header=True, index=False, encoding="utf-8")
-            print(f"✓ 已创建总参数文件并写入: {ALL_PARAMS_CSV}")
+            print(f"✓ : {ALL_PARAMS_CSV}")
         
-        # 打印关键统计
-        print(f"\n关键参数摘要:")
-        print(f"  - 数据集: {data_type}-{dataset}")
-        print(f"  - 处理细胞数: {self.stats['处理细胞数']}")
-        print(f"  - 最终基因数: {self.stats['最终用于模型的基因数']}")
-        print(f"  - 输出基因对数量: {self.stats['提取的总边数']}")
-        print(f"  - 运行时间: {self.stats['运行时间(分钟)']}分钟")
+        # 
+        print(f"\n:")
+        print(f"  - Dataset: {data_type}-{dataset}")
+        print(f"  - : {self.stats['']}")
+        print(f"  - : {self.stats['Model']}")
+        print(f"  - : {self.stats['']}")
+        print(f"  - Timestamp: {self.stats['Timestamp()']}")
 
     def clean_temp_files(self):
-        """清理临时文件"""
+        """"""
         print("\n" + "="*60)
-        print("🔟 清理临时文件")
+        print("🔟 ")
         print("="*60)
         
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR)
-            print(f"✓ 删除临时目录: {TEMP_DIR}")
+            print(f"✓ : {TEMP_DIR}")
         
-        # 尝试删除上级临时目录（如果为空）
+        # ()
         temp_parent = TEMP_DIR.parent
         if temp_parent.exists() and not any(temp_parent.iterdir()):
             os.rmdir(temp_parent)
-            print(f"✓ 删除空临时父目录: {temp_parent}")
+            print(f"✓ : {temp_parent}")
 
 # ==================== Main Function ====================
 def main():
     try:
-        # 初始化提取器
+        # 
         extractor = LangCellAttentionExtractor()
         
-        # 执行完整流程
+        # 
         extractor.load_vocab()
         extractor.load_model()
         extractor.load_csv_data()
@@ -777,18 +777,18 @@ def main():
         extractor.clean_temp_files()
         
         print("\n" + "="*80)
-        print(f"✅ {MODEL_NAME}-{data_type}-{dataset} 所有处理完成！")
-        print(f"输出文件汇总:")
-        print(f"  - 总参数文件: {ALL_PARAMS_CSV}")
-        print(f"  - 基因关系文件: {interactions_tsv_path}")
+        print(f"[INFO] {MODEL_NAME}-{data_type}-{dataset} processing completed.")
+        print(f":")
+        print(f"  - : {ALL_PARAMS_CSV}")
+        print(f"  - : {interactions_tsv_path}")
         print("="*80)
         
     except Exception as e:
-        print(f"\n❌ 处理失败: {str(e)}")
-        # 清理临时文件
+        print(f"\n[ERROR] Processing failed: {str(e)}")
+        # 
         if TEMP_DIR.exists():
             shutil.rmtree(TEMP_DIR)
-            print(f"✓ 已清理临时文件: {TEMP_DIR}")
+            print(f"✓ : {TEMP_DIR}")
         sys.exit(1)
 
 if __name__ == "__main__":

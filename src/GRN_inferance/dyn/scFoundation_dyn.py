@@ -102,7 +102,7 @@ PT_QUANTILE = 0.2
 
 # evaluation
 EVAL_MODE = "topk"  # ONLY: "topk" | "all_mapped"
-TOP_PERCENT = 30  # MODIFIED: 评估前5%的mapped基因（替代固定TOPK）
+TOP_PERCENT = 30  # MODIFIED: 5%mapped(TOPK)
 EPS_DIR = 1e-3  # direction threshold for defining up/down/zero
 
 # iterative inference
@@ -617,13 +617,13 @@ def run_one_dataset(name: str, cfg: dict, model, config, gene2idx_model, out_roo
             print("  [ERROR] No mapped genes. Skip.")
             return None, None
         
-        # MODIFIED: 动态计算前TOP_PERCENT%的mapped基因（至少1个）
+        # MODIFIED: TOP_PERCENT%mapped(1)
         total_mapped = len(idx_pool)
         top_n = max(int(total_mapped * TOP_PERCENT / 100), 1)
         print(f"  [INFO] EVAL_MODE=topk: selecting top {TOP_PERCENT}% of mapped genes ({top_n}/{total_mapped})")
         
         order = np.argsort(np.abs(true_delta_910[idx_pool]))[::-1]
-        eval_910 = idx_pool[order[:top_n]].copy()  # 取前top_n个
+        eval_910 = idx_pool[order[:top_n]].copy()  # top_n
         
     elif EVAL_MODE == "all_mapped":
         eval_910 = np.where(mapped_mask_910)[0].copy()
@@ -684,7 +684,7 @@ def run_one_dataset(name: str, cfg: dict, model, config, gene2idx_model, out_roo
 
     acc_curve = np.mean(np.array(acc_curve_accum, dtype=np.float32), axis=0).tolist()
     
-    # MODIFIED: 更新结果打印，显示百分比信息
+    # MODIFIED: ,
     if EVAL_MODE == "topk":
         print(f"  [RESULT] Final acc({EVAL_MODE}, Top-{TOP_PERCENT}%) = {acc_curve[-1]:.3f}")
     else:
@@ -752,14 +752,14 @@ def run_one_dataset(name: str, cfg: dict, model, config, gene2idx_model, out_roo
     if PLOT_NORM_CONFUSION:
         td = true_dir_910[in_eval]
         pd_ = pred_dir_910[in_eval]
-        # MODIFIED: 更新混淆矩阵标题，显示百分比
+        # MODIFIED: ,
         if EVAL_MODE == "topk":
             title = f"{name} (Top-{TOP_PERCENT}%)"
         else:
             title = f"{name} ({EVAL_MODE})"
         plot_norm_confusion(td, pd_, outdir / "norm_confusion_matrix.png", title=title)
 
-    # MODIFIED: 更新meta信息，记录百分比和实际评估基因数
+    # MODIFIED: meta,
     meta = {
         "dataset": name,
         "expr_csv": cfg["expr_csv"],
@@ -778,8 +778,8 @@ def run_one_dataset(name: str, cfg: dict, model, config, gene2idx_model, out_roo
         "n_early": int(early.sum()),
         "n_late": int(late.sum()),
         "eval_mode": EVAL_MODE,
-        "top_percent": float(TOP_PERCENT) if EVAL_MODE == "topk" else None,  # 新增：百分比参数
-        "top_n_actual": int(top_n) if EVAL_MODE == "topk" else None,        # 新增：实际评估基因数
+        "top_percent": float(TOP_PERCENT) if EVAL_MODE == "topk" else None,  # :
+        "top_n_actual": int(top_n) if EVAL_MODE == "topk" else None,        # :
         "eval_genes_mapped_used": int(len(eval_model_idx)),
         "iters": N_ITERS,
         "batch_cells": BATCH_CELLS,
@@ -795,7 +795,7 @@ def run_one_dataset(name: str, cfg: dict, model, config, gene2idx_model, out_roo
     }
     (outdir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
-    # MODIFIED: 更新diagnostics，记录百分比相关信息
+    # MODIFIED: diagnostics,
     diagnostics = {
         "n_cells": int(X.shape[0]),
         "n_genes": int(X.shape[1]),
@@ -823,7 +823,7 @@ def plot_curves(all_curves: dict, outdir: Path):
     for name, curve in all_curves.items():
         ax.plot(range(1, len(curve) + 1), curve, marker="o", linewidth=1.5, label=name)
     
-    # MODIFIED: 更新Y轴标签，显示百分比
+    # MODIFIED: Y,
     if EVAL_MODE == "topk":
         ax.set_ylabel(f"Direction accuracy (Top-{TOP_PERCENT}%)")
     else:
@@ -843,7 +843,7 @@ def plot_curves(all_curves: dict, outdir: Path):
 # =========================================================
 def main():
     print(f"Using device: {DEVICE}")
-    # MODIFIED: 打印百分比参数
+    # MODIFIED: 
     if EVAL_MODE == "topk":
         print(f"[INFO] EVAL_MODE={EVAL_MODE} (Top-{TOP_PERCENT}% of mapped genes)")
     else:
@@ -880,7 +880,7 @@ def main():
     print("\n" + "=" * 80)
     print("SUMMARY")
     print("=" * 80)
-    # MODIFIED: 扩展汇总表格，显示百分比和实际评估基因数
+    # MODIFIED: ,
     if EVAL_MODE == "topk":
         print(f"{'Dataset':<12} {'Mapped%':<10} {'EvalGenes':<10} {'Early':<8} {'Late':<8} {'FinalAcc':<10}")
         print("-" * 80)

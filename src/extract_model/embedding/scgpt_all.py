@@ -32,7 +32,7 @@ def parse_args():
 
 ARGS = None
 
-# -------------------------- 全局路径（运行时注入；禁止硬编码） --------------------------
+# -------------------------- (;) --------------------------
 INPUT_ROOT = None
 OUTPUT_ROOT = None
 MODEL_DIR = None
@@ -40,29 +40,29 @@ MODEL_FILE = None
 VOCAB_FILE = None
 RESULTS_LOG_FILE = None
 
-# 模型固定参数
+# Model
 PAD_TOKEN = "<pad>"
 SPECIAL_TOKENS = [PAD_TOKEN, "<cls>", "<eoc>"]
-MODEL_NAME = "scGPT"  # 模型名称
+MODEL_NAME = "scGPT"  # Model
 
-# -------------------------- 核心修复：直接加载词汇表和嵌入权重 --------------------------
+# -------------------------- :Vocabulary --------------------------
 from scgpt.tokenizer.gene_tokenizer import GeneVocab
 
-# -------------------------- 工具函数 --------------------------
+# --------------------------  --------------------------
 def save_run_statistics(stats_dict):
-    """保存运行统计信息到CSV文件"""
+    """CSV"""
     stats_df = pd.DataFrame([stats_dict])
     if not RESULTS_LOG_FILE.exists():
         stats_df.to_csv(RESULTS_LOG_FILE, index=False, mode='w')
-        print(f"\n✅ 统计日志文件已创建：{RESULTS_LOG_FILE}")
+        print(f"\n[INFO] Stats log created: {RESULTS_LOG_FILE}")
     else:
         stats_df.to_csv(RESULTS_LOG_FILE, index=False, mode='a', header=False)
-        print(f"\n✅ 统计信息已追加到日志文件：{RESULTS_LOG_FILE}")
+        print(f"\n[INFO] Stats appended: {RESULTS_LOG_FILE}")
 
 def extract_dataset_name(file_path):
-    """提取纯数据集名（移除所有后缀）"""
+    """Extract the normalized dataset name()"""
     file_name = Path(file_path).name
-    # 统一提取数据集核心名称
+    # Dataset
     if "_chip_matched-ExpressionData.csv" in file_name:
         dataset_name = file_name.split('_chip_matched-ExpressionData.csv')[0]
     elif "_processed-ExpressionData.csv" in file_name:
@@ -71,9 +71,9 @@ def extract_dataset_name(file_path):
         dataset_name = file_name.split('-ExpressionData.csv')[0]
     return dataset_name
 
-# -------------------------- 基因嵌入处理类 --------------------------
+# -------------------------- Gene embedding processing class --------------------------
 class GeneEmbeddingProcessor:
-    """处理基因嵌入数据，生成全量双向边"""
+    """Processing gene embeddings,Generated"""
     def __init__(self, gene_emb_dict):
         self.gene_emb_dict = gene_emb_dict
         self.gene_embeddings = None
@@ -82,34 +82,34 @@ class GeneEmbeddingProcessor:
         self.process_embeddings()
     
     def process_embeddings(self):
-        """处理嵌入数据"""
-        print("\n处理基因嵌入数据...")
+        """Process embedding data"""
+        print("\nProcessing gene embeddings...")
         self.gene_names = list(self.gene_emb_dict.keys())
         self.gene_embeddings = np.array(list(self.gene_emb_dict.values()))
-        print(f"成功处理 {len(self.gene_names)} 个基因")
+        print(f"Processed successfully: {len(self.gene_names)} ")
         if len(self.gene_embeddings) > 0:
-            print(f"嵌入维度: {self.gene_embeddings.shape[1]}")
+            print(f"Embedding dimension: {self.gene_embeddings.shape[1]}")
     
     def compute_similarity_matrix(self):
-        """计算余弦相似度矩阵（固定方法）"""
+        """()"""
         if self.gene_embeddings is None or len(self.gene_embeddings) == 0:
-            raise ValueError("没有有效的基因嵌入数据")
-        print(f"\n计算基因间余弦相似度...")
+            raise ValueError("")
+        print(f"\nComputing cosine similarity between genes...")
         self.similarity_matrix = cosine_similarity(self.gene_embeddings)
-        np.fill_diagonal(self.similarity_matrix, 0)  # 移除自环
-        print(f"相似度矩阵形状: {self.similarity_matrix.shape}")
+        np.fill_diagonal(self.similarity_matrix, 0)  # 
+        print(f"Similarity matrix shape: {self.similarity_matrix.shape}")
         return self.similarity_matrix
     
     def generate_all_interactions(self):
-        """生成全量双向边（i≠j，无筛选）"""
+        """Generated(i≠j,)"""
         if self.similarity_matrix is None:
-            raise ValueError("请先调用 compute_similarity_matrix 计算相似度矩阵")
+            raise ValueError(" compute_similarity_matrix ")
         edge_weights = []
         n_genes = len(self.gene_names)
         for i in range(n_genes):
             gene1 = self.gene_names[i]
             for j in range(n_genes):
-                if i != j:  # 仅过滤自环，保留所有双向边
+                if i != j:  # Remove self-loops only and keep all directed edges
                     gene2 = self.gene_names[j]
                     weight = self.similarity_matrix[i, j]
                     edge_weights.append({
@@ -117,33 +117,33 @@ class GeneEmbeddingProcessor:
                         'Gene2': gene2,
                         'EdgeWeight': round(weight, 15)
                     })
-        print(f"\n生成 {len(edge_weights)} 个全量非自环基因对")
+        print(f"\nGenerated {len(edge_weights)} all non-self-loop directed gene pairs")
         return edge_weights
 
-# -------------------------- 预加载scGPT嵌入权重和词汇表 --------------------------
+# -------------------------- scGPTVocabulary --------------------------
 def preload_scgpt_embeddings(model_file: Path, vocab_file: Path):
-    """预加载scGPT的基因嵌入权重和词汇表（仅加载一次）"""
-    # 1. 加载词汇表
-    print("📌 加载scGPT词汇表...")
+    """scGPTVocabulary()"""
+    # 1. Vocabulary
+    print("[INFO] Loading scGPT vocabulary...")
     vocab = GeneVocab.from_file(vocab_file)
     for s in SPECIAL_TOKENS:
         if s not in vocab:
             vocab.append_token(s)
     gene2idx = vocab.get_stoi()
     idx2gene = {v: k for k, v in gene2idx.items()}
-    print(f"✅ 词汇表加载完成 | 总词汇数：{len(gene2idx)}")
+    print(f"[INFO] Vocabulary loaded. Total tokens: {len(gene2idx)}")
     
-    # 2. 直接加载模型权重文件，提取嵌入层
-    print("📌 加载scGPT嵌入层权重...")
+    # 2. Model,
+    print("[INFO] Loading scGPT embedding weights...")
     state_dict = torch.load(model_file, map_location='cpu')
     
-    # 核心修复：适配更多嵌入层参数名（包含encoder.embedding.weight）
+    # :(encoder.embedding.weight)
     emb_weight_candidates = [
-        "encoder.embedding.weight",          # 当前报错中出现的参数名
-        "encoder.embeddings.weight",         # 旧版scGPT参数名
-        "embeddings.word_embeddings.weight", # 标准Transformer参数名
-        "word_embeddings.weight",            # 极简版参数名
-        "embedding.weight"                   # 最简化参数名
+        "encoder.embedding.weight",          # 
+        "encoder.embeddings.weight",         # scGPT
+        "embeddings.word_embeddings.weight", # Transformer
+        "word_embeddings.weight",            # 
+        "embedding.weight"                   # 
     ]
     
     emb_weight_key = None
@@ -153,20 +153,20 @@ def preload_scgpt_embeddings(model_file: Path, vocab_file: Path):
             break
     
     if emb_weight_key is None:
-        # 打印前20个参数名，便于排查
+        # 20,
         top_keys = list(state_dict.keys())[:20]
-        raise KeyError(f"未找到嵌入层权重！权重文件中的参数名前20个：{top_keys}")
+        raise KeyError(f"!20:{top_keys}")
     
-    print(f"✅ 找到嵌入层参数：{emb_weight_key}")
+    print(f"[INFO] Found embedding key: {emb_weight_key}")
     token_emb = state_dict[emb_weight_key]
-    print(f"✅ 嵌入层权重加载完成 | 形状：{token_emb.shape}")
+    print(f"[INFO] Embedding weights loaded. Shape: {token_emb.shape}")
     
-    # 3. 构建基因→嵌入的映射（排除特殊token）
+    # 3. →(token)
     gene_emb_dict = {}
     special_token_ids = [gene2idx[s] for s in SPECIAL_TOKENS if s in gene2idx]
-    print(f"🔍 特殊token ID：{special_token_ids}")
+    print(f"[INFO] Special token IDs: {special_token_ids}")
     
-    # 确保索引不越界
+    # 
     max_idx = min(len(token_emb), len(idx2gene))
     for idx in range(max_idx):
         if idx in idx2gene and idx not in special_token_ids:
@@ -174,33 +174,33 @@ def preload_scgpt_embeddings(model_file: Path, vocab_file: Path):
             gene_emb = token_emb[idx].detach().cpu().numpy()
             gene_emb_dict[gene_name] = gene_emb
     
-    print(f"✅ 基因嵌入映射构建完成 | 有效基因数：{len(gene_emb_dict)}")
-    print(f"前5个基因：{list(gene_emb_dict.keys())[:5]}")
+    print(f"[INFO] Gene embedding map built. Valid genes: {len(gene_emb_dict)}")
+    print(f"5:{list(gene_emb_dict.keys())[:5]}")
     
     return gene2idx, gene_emb_dict
 
 gene2idx = None
 preloaded_emb_dict = None
 
-# -------------------------- 单文件对处理函数 --------------------------
-def process_single_pair(expr_path, network_path):
-    """处理单个文件对，输出全量双向边，统一命名风格"""
+# --------------------------  --------------------------
+def process_single_pair(expr_path):
+    """Process one input file and export all directed edges with consistent naming."""
     start_time = time.time()
     run_datetime = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     
-    # 1. 提取纯数据集名称（无文件夹后缀）
+    # 1. Extract the normalized dataset name()
     dataset_name = extract_dataset_name(expr_path)
-    # 输出文件命名：scGPT_数据集.tsv（统一风格）
+    # :scGPT_Dataset.tsv()
     output_tsv_name = f"{MODEL_NAME}_{dataset_name}.tsv"
     output_tsv_path = OUTPUT_ROOT / output_tsv_name
     
     print(f"\n=====================================")
-    print(f"🔍 处理数据集：{dataset_name}")
-    print(f"   Expr文件：{expr_path}")
-    print(f"   输出文件：{output_tsv_path}")
+    print(f"[INFO] Processing dataset: {dataset_name}")
+    print(f"   Expr:{expr_path}")
+    print(f"   :{output_tsv_path}")
     print(f"=====================================")
 
-    # 初始化核心统计字典
+    # 
     stats = {
         'Run_Datetime': run_datetime,
         'Dataset_Name': dataset_name,
@@ -217,20 +217,20 @@ def process_single_pair(expr_path, network_path):
     }
 
     try:
-        # -------------------------- 步骤1：读取输入文件，提取基因名 --------------------------
-        print("\n📌 步骤1：读取输入表达文件")
+        # -------------------------- Step1:read the input file and extract gene names --------------------------
+        print("\n[INFO] Step 1: read input expression file")
         expr_df = pd.read_csv(expr_path, header=0, index_col=0)
         input_genes = expr_df.index.tolist()
         stats['Input_Genes_Count'] = len(input_genes)
-        print(f"输入文件包含 {len(input_genes)} 个基因")
+        print(f"File contains {len(input_genes)} ")
 
-        # -------------------------- 步骤2：匹配预加载的基因嵌入 --------------------------
-        print("\n📌 步骤2：匹配scGPT基因嵌入")
-        # 统一基因名格式（大小写+去空格）
+        # -------------------------- Step2: --------------------------
+        print("\n[INFO] Step 2: match scGPT gene embeddings")
+        # (+)
         input_genes_clean = {str(gene).strip().upper(): gene for gene in input_genes}
         preloaded_genes_clean = {str(gene).strip().upper(): gene for gene in preloaded_emb_dict.keys()}
         
-        # 匹配基因
+        # 
         matched_genes = []
         matched_emb = []
         for gene_clean, gene_original in input_genes_clean.items():
@@ -241,55 +241,55 @@ def process_single_pair(expr_path, network_path):
         stats['Matched_Genes_Count'] = len(matched_genes)
         stats['Matched_Ratio(%)'] = round(len(matched_genes) / len(input_genes) * 100, 2) if len(input_genes) > 0 else 0.0
         
-        print(f"匹配到scGPT嵌入的基因：{len(matched_genes)} 个 ({stats['Matched_Ratio(%)']}%)")
-        print(f"匹配的前5个基因: {matched_genes[:5]}")
+        print(f"Genes matched to scGPT embeddings:{len(matched_genes)}  ({stats['Matched_Ratio(%)']}%)")
+        print(f"First 5 matched genes: {matched_genes[:5]}")
         
         if len(matched_genes) == 0:
-            print("⚠️ 没有匹配到任何基因，跳过该文件！")
+            print("[WARN] No matched genes; skip this dataset.")
             stats['Run_Time_Seconds'] = round(time.time() - start_time, 2)
             save_run_statistics(stats)
             return
         
-        # 构建当前文件的基因嵌入字典
+        # 
         gene_emb_dict = {gene: emb for gene, emb in zip(matched_genes, matched_emb)}
 
-        # -------------------------- 步骤3：生成全量双向边 --------------------------
-        print("\n📌 步骤3：生成全量双向边权重")
+        # -------------------------- Step3:Generated --------------------------
+        print("\n[INFO] Step 3: generate directed non-self-loop edges")
         processor = GeneEmbeddingProcessor(gene_emb_dict)
         processor.compute_similarity_matrix()
         
-        # 生成所有非自环双向边
+        # Generated
         all_interactions = processor.generate_all_interactions()
         stats['Total_Edges_Generated'] = len(all_interactions)
         
-        # 按权重降序排序
+        # Sort by weight in descending order
         final_interactions = sorted(all_interactions, key=lambda x: x['EdgeWeight'], reverse=True)
 
-        # -------------------------- 步骤4：保存最终TSV文件 --------------------------
-        print("\n📌 步骤4：保存最终TSV文件")
+        # -------------------------- Step4:save the final TSV file --------------------------
+        print("\n[INFO] Step 4: save final TSV")
         interactions_df = pd.DataFrame(final_interactions)
         interactions_df.to_csv(output_tsv_path, sep='\t', index=False)
         
-        print(f"\n✅ 最终TSV文件已保存至：{output_tsv_path}")
-        print(f"文件包含 {len(interactions_df)} 个全量双向边")
+        print(f"\n[INFO] Final TSV saved: {output_tsv_path}")
+        print(f"File contains {len(interactions_df)} ")
         if len(interactions_df) > 0:
-            print(f"权重范围：{interactions_df['EdgeWeight'].min():.6f} ~ {interactions_df['EdgeWeight'].max():.6f}")
+            print(f"Weight range:{interactions_df['EdgeWeight'].min():.6f} ~ {interactions_df['EdgeWeight'].max():.6f}")
     
     except Exception as e:
-        print(f"❌ 处理文件失败：{e}")
+        print(f"[ERROR] Dataset processing failed: {e}")
         stats['Process_Status'] = f"Failed: {str(e)[:100]}"
         import traceback
         traceback.print_exc()
     
-    # -------------------------- 步骤5：保存统计信息 --------------------------
+    # -------------------------- Step5:save run statistics --------------------------
     stats['Run_Time_Seconds'] = round(time.time() - start_time, 2)
-    print(f"\n📊 运行统计摘要 | 耗时：{stats['Run_Time_Seconds']} 秒")
-    print(f"   输入基因数：{stats['Input_Genes_Count']} | 匹配基因数：{stats['Matched_Genes_Count']}")
-    print(f"   生成边数：{stats['Total_Edges_Generated']}")
+    print(f"\n[INFO] Runtime summary | elapsed: {stats['Run_Time_Seconds']} seconds")
+    print(f"   Input gene count:{stats['Input_Genes_Count']} | Matched gene count:{stats['Matched_Genes_Count']}")
+    print(f"   Generated edge count:{stats['Total_Edges_Generated']}")
     
     save_run_statistics(stats)
 
-# -------------------------- 批量遍历主函数 --------------------------
+# -------------------------- Main batch traversal function --------------------------
 def main():
     global ARGS, INPUT_ROOT, OUTPUT_ROOT, MODEL_DIR, MODEL_FILE, VOCAB_FILE, RESULTS_LOG_FILE
     global gene2idx, preloaded_emb_dict
@@ -308,50 +308,42 @@ def main():
     try:
         gene2idx, preloaded_emb_dict = preload_scgpt_embeddings(MODEL_FILE, VOCAB_FILE)
     except Exception as e:
-        print(f"❌ 预加载失败：{e}")
+        print(f"[ERROR] Preload failed: {e}")
         sys.exit(1)
 
-    print("🚀 开始scGPT批量处理流程（输出全量双向边）")
-    print(f"输入根目录：{INPUT_ROOT}")
-    print(f"输出根目录：{OUTPUT_ROOT}")
+    print("[INFO] Start scGPT batch processing (directed non-self-loop edges).")
+    print(f"Input root:{INPUT_ROOT}")
+    print(f"Output root:{OUTPUT_ROOT}")
     
-    # 忽略临时文件清理警告
+    # 
     warnings.filterwarnings('ignore', category=ResourceWarning)
     
-    # 目标文件夹列表
+    # Target folder list
     target_folders = ARGS.folders
     
     for folder in target_folders:
         folder_path = INPUT_ROOT / folder
         if not folder_path.exists():
-            print(f"\n⚠️ 文件夹不存在，跳过：{folder_path}")
+            print(f"\n[WARN] Folder not found: {folder_path}; skip.")
             continue
         
         print(f"\n=====================================")
-        print(f"📂 扫描文件夹：{folder}")
+        print(f"[INFO] Scanning folder: {folder}")
         print(f"=====================================")
         
-        # 找到所有ExpressionData文件
+        # Find all ExpressionData files
         expr_files = [f for f in os.listdir(folder_path) if f.endswith('-ExpressionData.csv')]
         if not expr_files:
-            print(f"⚠️ 文件夹 {folder} 中未找到ExpressionData.csv文件，跳过")
+            print(f"[WARN] No ExpressionData.csv files in {folder}; skip.")
             continue
         
-        # 处理每个ExpressionData文件
+        # ExpressionData
         for expr_file in expr_files:
             expr_path = folder_path / expr_file
-            # 匹配对应的network文件（仅检查存在性）
-            network_file = expr_file.replace('-ExpressionData.csv', '-network.csv')
-            network_path = folder_path / network_file
-            
-            if not network_path.exists():
-                print(f"⚠️ 缺失对应的network文件：{network_path} → 跳过 {expr_file}")
-                continue
-            
-            # 处理当前文件对
-            process_single_pair(expr_path, network_path)
+            #  ExpressionData 
+            process_single_pair(expr_path)
     
-    print(f"\n🎉 所有文件处理完成！结果保存在：{OUTPUT_ROOT}")
+    print(f"\n[INFO] All files processed. Outputs saved in: {OUTPUT_ROOT}")
 
 if __name__ == "__main__":
     main()
