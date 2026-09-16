@@ -9,6 +9,7 @@ Unified output format with batch-level parameter logging.
 import scanpy as sc
 import pickle
 import os
+import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -20,19 +21,41 @@ import scipy
 import loompy
 import datetime
 import sys
+import time
 from tqdm import tqdm
 
-# ==================== Command-line arguments ====================
-if len(sys.argv) != 3:
-    print("Usage: python geneformer_attention_batch.py <data_type> <dataset_name>")
-    print("Example: python geneformer_attention_batch.py CHIP hESC")
-    print("      python geneformer_attention_batch.py Non_CHIP hHep")
-    print("      python geneformer_attention_batch.py STRING mHSC-E")
-    sys.exit(1)
+def parse_args() -> argparse.Namespace:
+    p = argparse.ArgumentParser(
+        description="Extract Geneformer attention edges for one dataset (no extra filtering)."
+    )
+    p.add_argument("data_type", choices=["CHIP", "Non_CHIP", "STRING"])
+    p.add_argument("dataset", type=str)
+    p.add_argument(
+        "--weights-root",
+        default="/mnt/md0/yzn/scFM-Bench-main/data/weights",
+        type=str,
+        help="Root directory containing Geneformer/.",
+    )
+    p.add_argument(
+        "--input-root",
+        default="/mnt/md0/yzn/Beeline-master/benchmark_SF/input_process1000",
+        type=str,
+        help="Root directory containing CHIP/ Non_CHIP/ STRING input CSVs.",
+    )
+    p.add_argument(
+        "--output-root",
+        default="/mnt/md0/yzn/Beeline-master/benchmark_SF/model/output_att1000/geneformer",
+        type=str,
+        help="Output directory for TSV and run-parameter CSV files.",
+    )
+    p.add_argument("--model-version", default="6L", type=str, help="Geneformer model version folder name.")
+    return p.parse_args()
 
-data_type = sys.argv[1]  # Data type: CHIP / Non_CHIP / STRING
-dataset = sys.argv[2]    # Dataset name, such as hESC or hHep
-MODEL_VERSION = "6L"     # Fixed model version
+
+ARGS = parse_args()
+data_type = ARGS.data_type
+dataset = ARGS.dataset
+MODEL_VERSION = ARGS.model_version
 MODEL_NAME = f"geneformer_{MODEL_VERSION}"
 
 
@@ -44,11 +67,11 @@ if data_type not in valid_data_types:
 
 # ==================== Path configuration ====================
 # Base paths
-GENEFORMER_BASE = "/mnt/md0/yzn/scFM-Bench-main/data/weights/Geneformer"
+GENEFORMER_BASE = str(Path(ARGS.weights_root) / "Geneformer")
 DICT_DIR = f"{GENEFORMER_BASE}/dicts"
 MODEL_DIR = f"{GENEFORMER_BASE}/default/{MODEL_VERSION}"
-INPUT_ROOT = "/mnt/md0/yzn/Beeline-master/benchmark_SF/input_process1000"
-OUTPUT_ROOT = Path("/mnt/md0/yzn/Beeline-master/benchmark_SF/model/output_att1000/geneformer")
+INPUT_ROOT = ARGS.input_root
+OUTPUT_ROOT = Path(ARGS.output_root)
 
 # Resolve input subdirectory and filename suffix from data type
 if data_type == "CHIP":
@@ -60,7 +83,6 @@ elif data_type == "Non_CHIP" or data_type == "STRING":
 
 # Input file paths
 csv_path = Path(f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv")
-network_path = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
 # Output directory grouped by data type
 TYPE_OUTPUT_DIR = OUTPUT_ROOT / data_type
@@ -74,8 +96,8 @@ TEMP_TOKENIZED_DIR.mkdir(exist_ok=True, parents=True)
 
 # Output naming convention: model-version-type-dataset-file
 file_prefix = f"geneformer-{MODEL_VERSION}-{data_type}-{dataset}-att"
-# Only keep the filtered TSV path
-filtered_tsv_path = TYPE_OUTPUT_DIR / f"{file_prefix}_filtered.tsv"
+# Save full-edge TSV (no extra filtering)
+raw_tsv_path = TYPE_OUTPUT_DIR / f"{file_prefix}.tsv"
 
 # Shared parameter summary CSV
 ALL_PARAMS_CSV = OUTPUT_ROOT / "geneformer-all-params.csv"
@@ -85,7 +107,6 @@ print(f"[INFO] Task config: {MODEL_NAME} | {data_type} | {dataset}")
 print("="*80)
 print(f"Model path: {MODEL_DIR}")
 print(f"Input expression file: {csv_path}")
-print(f"Input network file: {network_path}")
 print(f"Output directory: {TYPE_OUTPUT_DIR}")
 print(f"Parameter summary file: {ALL_PARAMS_CSV}")
 print("="*80)
@@ -298,17 +319,8 @@ print(f"[INFO] Dataset size: {tokenized_size} cells")
 print("\nBuilding gene-name mapping...")
 id_to_ensembl = {v: k for k, v in token_dict.items()}
 ensembl_to_gene = {v: k for k, v in gene_name_dict.items()}
-
-first_cell = tokenized_dataset[0]
-gene_ids_from_tokens = np.array(first_cell['input_ids'])
-gene_names_from_tokens = [
-    ensembl_to_gene.get(id_to_ensembl.get(gid, ""), "") 
-    for gid in gene_ids_from_tokens
-]
-
-valid_mask = [name != "" for name in gene_names_from_tokens]
-valid_indices = [i for i, v in enumerate(valid_mask) if v]
-final_gene_names = [gene_names_from_tokens[i] for i in valid_indices]
+final_gene_names = matched_gene_symbols
+gene_to_global_idx = {g: i for i, g in enumerate(final_gene_names)}
 n_final_genes = len(final_gene_names)
 
 print(f"[INFO] Valid genes: {n_final_genes}")
@@ -360,7 +372,8 @@ print(f"[INFO] Dataloader ready: {len(dataloader)} batches")
 target_layer = -1
 print(f"\nStart attention extraction (Layer {target_layer})...")
 
-attention_sum = None
+attention_sum = np.zeros((n_final_genes, n_final_genes), dtype=np.float64)
+attention_count = np.zeros((n_final_genes, n_final_genes), dtype=np.int32)
 num_cells_processed = 0
 batch_debug = 0
 
@@ -404,11 +417,41 @@ with torch.no_grad():
             print(f"  Non-zero ratio: {(attn_numpy != 0).mean():.6f}")
             batch_debug += 1
         
-        # Accumulate attention
-        if attention_sum is None:
-            attention_sum = attn_numpy.sum(axis=0)
-        else:
-            attention_sum += attn_numpy.sum(axis=0)
+        input_ids_np = batch["input_ids"].cpu().numpy()
+        mask_np = batch["attention_mask"].cpu().numpy()
+
+        # Accumulate onto a fixed global gene axis (matched_gene_symbols).
+        for cell_idx in range(attn_numpy.shape[0]):
+            token_positions = np.where(mask_np[cell_idx] > 0)[0]
+            if token_positions.size == 0:
+                continue
+
+            selected_pos = []
+            selected_global_idx = []
+            seen_global_idx = set()
+
+            for pos in token_positions:
+                gid = int(input_ids_np[cell_idx, pos])
+                ensembl_id = id_to_ensembl.get(gid, "")
+                gene_name = ensembl_to_gene.get(ensembl_id, "")
+                if gene_name == "":
+                    continue
+                global_idx = gene_to_global_idx.get(gene_name, None)
+                if global_idx is None or global_idx in seen_global_idx:
+                    continue
+                seen_global_idx.add(global_idx)
+                selected_pos.append(int(pos))
+                selected_global_idx.append(int(global_idx))
+
+            if len(selected_global_idx) < 2:
+                continue
+
+            selected_pos_arr = np.array(selected_pos, dtype=np.int32)
+            selected_global_idx_arr = np.array(selected_global_idx, dtype=np.int32)
+            cell_attn = attn_numpy[cell_idx][np.ix_(selected_pos_arr, selected_pos_arr)]
+
+            attention_sum[np.ix_(selected_global_idx_arr, selected_global_idx_arr)] += cell_attn
+            attention_count[np.ix_(selected_global_idx_arr, selected_global_idx_arr)] += 1
         
         num_cells_processed += input_ids.shape[0]
         
@@ -418,11 +461,13 @@ with torch.no_grad():
 
 print(f"[INFO] Attention extraction complete. Processed {num_cells_processed} cells")
 
-# Compute mean attention
-avg_attention = attention_sum / num_cells_processed
-
-# Keep the valid-gene region
-gene_attention = avg_attention[np.ix_(valid_indices, valid_indices)]
+# Compute mean attention on the fixed global gene axis
+gene_attention = np.divide(
+    attention_sum,
+    attention_count,
+    out=np.zeros_like(attention_sum, dtype=np.float64),
+    where=attention_count > 0,
+)
 
 print(f"\nGene-gene attention matrix shape: {gene_attention.shape}")
 print(f"Attentionstatistics:")
@@ -453,18 +498,8 @@ gene_interactions_df = gene_interactions_df.sort_values(by="EdgeWeight", ascendi
 # print(f"[INFO] Raw interaction TSV: {interactions_tsv_path}")
 
 # Filter with the network file
-print("\nFiltering interaction TSV...")
-if not os.path.exists(network_path):
-    raise FileNotFoundError(f"Network file not found: {network_path}")
-
-network_df = pd.read_csv(network_path)
-target_gene1_list = network_df["Gene1"].unique().tolist()
-filtered_interactions = gene_interactions_df[gene_interactions_df["Gene1"].isin(target_gene1_list)]
-filtered_interactions = filtered_interactions.sort_values(by="EdgeWeight", ascending=False).reset_index(drop=True)
-
-# Save the filtered TSV
-filtered_interactions.to_csv(filtered_tsv_path, sep="\t", index=False)
-print(f"[INFO] Filtered interaction TSV: {filtered_tsv_path}")
+gene_interactions_df.to_csv(raw_tsv_path, sep="\t", index=False)
+print(f"[INFO] Raw interaction TSV: {raw_tsv_path}")
 
 # ========== Record run parameters ==========
 print("\n" + "="*60)
@@ -493,9 +528,8 @@ params = {
     "Model device": str(device),
     "Total extracted gene pairs": len(gene_interactions_df),
     "Total extracted edges": len(gene_interactions_df),
-    "Gene1 count in labels": len(target_gene1_list),
-    "Filtered edges with Gene1 in labels": len(filtered_interactions),
-    "Filtering rate (%)": f"{len(filtered_interactions)/len(gene_interactions_df)*100:.1f}" if len(gene_interactions_df) > 0 else "0",
+    "Exported edges": len(gene_interactions_df),
+    "Filtering rate (%)": "100.0",
     "Min": f"{gene_attention.min():.6f}",
     "Max": f"{gene_attention.max():.6f}",
     "Mean": f"{gene_attention.mean():.6f}",
@@ -503,7 +537,7 @@ params = {
     "Runtime (minutes)": f"{run_time:.2f}",
     "Run timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     # TSV path
-    "Filtered TSV path": str(filtered_tsv_path)
+    "Raw TSV path": str(raw_tsv_path)
 }
 
 # Append parameters to the summary CSV
@@ -528,8 +562,19 @@ if loom_path.exists():
 
 # Remove temporary tokenized directory
 if TEMP_TOKENIZED_DIR.exists():
-    shutil.rmtree(TEMP_TOKENIZED_DIR)
-    print(f"[INFO] Removed temporary tokenized directory: {TEMP_TOKENIZED_DIR}")
+    removed = False
+    for retry_idx in range(3):
+        try:
+            shutil.rmtree(TEMP_TOKENIZED_DIR)
+            removed = True
+            print(f"[INFO] Removed temporary tokenized directory: {TEMP_TOKENIZED_DIR}")
+            break
+        except OSError as e:
+            if retry_idx < 2:
+                time.sleep(0.5)
+            else:
+                # Do not fail the whole run on cleanup race/lock issues.
+                print(f"[WARN] Failed to fully remove temporary tokenized directory: {TEMP_TOKENIZED_DIR} ({e})")
 
 # Remove the temporary preprocessing directory if empty
 if TEMP_PREPROCESSED_DIR.exists() and not any(TEMP_PREPROCESSED_DIR.iterdir()):
@@ -549,11 +594,11 @@ print(f"\nstatistics:")
 print(f"  Valid genes: {n_final_genes}")
 print(f"  : {num_cells_processed}")
 print(f"  : {len(gene_interactions_df)} ()")
-print(f"  : {len(filtered_interactions)}")
-print(f"  : {len(filtered_interactions)/len(gene_interactions_df)*100:.2f}%" if len(gene_interactions_df) > 0 else "0%")
+print(f"  Exported edges: {len(gene_interactions_df)}")
+print("  Filtering ratio: 100.00% (no extra filtering)")
 print(f"  Timestamp: {run_time:.2f}")
 print(f"\n:")
-print(f"  - TSV: {filtered_tsv_path.name}")
+print(f"  - TSV: {raw_tsv_path.name}")
 print(f"  - CSV: {ALL_PARAMS_CSV.name}")
 print("\n[INFO] All processing completed.")
 print("="*80)

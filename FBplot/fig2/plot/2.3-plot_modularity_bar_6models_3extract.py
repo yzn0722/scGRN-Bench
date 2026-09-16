@@ -146,6 +146,19 @@ def calc_modularity(edges: pd.DataFrame) -> float:
     return float(modularity(g, comms))
 
 
+def calc_string_modularity(dataset: str) -> float:
+    """Compute STRING modularity baseline for one dataset."""
+    fp = STRING_ROOT / f"{dataset}_processed-network.csv"
+    if not fp.exists():
+        return np.nan
+    try:
+        df = pd.read_csv(fp)
+        ed = normalize_edges(df)[["Gene1", "Gene2"]].copy()
+        return calc_modularity(ed)
+    except Exception:
+        return np.nan
+
+
 def compute_table(dataset: str, top_k: int) -> pd.DataFrame:
     g1, gu, n_string_edges = load_string(dataset)
     keep_k = n_string_edges if top_k <= 0 else min(top_k, n_string_edges)
@@ -180,7 +193,7 @@ def compute_table(dataset: str, top_k: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def plot_bar(df: pd.DataFrame, out_png: Path) -> None:
+def plot_bar(df: pd.DataFrame, out_png: Path, string_modularity: float = np.nan) -> None:
     out_png.parent.mkdir(parents=True, exist_ok=True)
     pivot = df.pivot(index="Model", columns="Extraction", values="Modularity").reindex(index=list(MODELS), columns=list(EXTRACTIONS))
 
@@ -198,6 +211,16 @@ def plot_bar(df: pd.DataFrame, out_png: Path) -> None:
             edgecolor="none",
             linewidth=0.0,
             label=EXTRACTION_DISPLAY.get(ext, ext),
+        )
+
+    if np.isfinite(string_modularity):
+        ax.axhline(
+            y=float(string_modularity),
+            color=model_color("STRING"),
+            linestyle="--",
+            linewidth=2.0,
+            label="_nolegend_",
+            zorder=3,
         )
 
     ax.set_xticks(x)
@@ -242,10 +265,11 @@ def main() -> None:
         else script_dir / "output" / "modularity_bar" / f"{args.dataset}_modularity_6models_3extract.pdf"
     )
     df = compute_table(dataset=args.dataset, top_k=int(args.top_edges))
+    string_modularity = calc_string_modularity(args.dataset)
     csv_out = out_png.with_suffix(".csv")
     csv_out.parent.mkdir(parents=True, exist_ok=True)
     df.to_csv(csv_out, index=False)
-    plot_bar(df, out_png)
+    plot_bar(df, out_png, string_modularity=string_modularity)
     print(f"Saved figure: {out_png}")
     print(f"Saved table : {csv_out}")
 

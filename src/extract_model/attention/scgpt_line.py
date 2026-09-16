@@ -125,21 +125,10 @@ def get_all_expression_files():
             else:
                 dataset_name = expr_file.stem.replace("_processed-ExpressionData", "")
             
-            # Network
-            if data_type == "CHIP":
-                network_file = data_type_dir / f"{dataset_name}_chip_matched-network.csv"
-            else:
-                network_file = data_type_dir / f"{dataset_name}_processed-network.csv"
-            
-            if not network_file.exists():
-                print(f"[ERROR] Skip {dataset_name}: network file not found {network_file}")
-                continue
-            
             task_list.append({
                 "data_type": data_type,
                 "dataset_name": dataset_name,
                 "expr_file": expr_file,
-                "network_file": network_file
             })
     
     print(f"\n📋 :{len(task_list)}Dataset")
@@ -153,7 +142,6 @@ def process_single_dataset(model, vocab, device, model_configs, task):
     data_type = task["data_type"]
     dataset_name = task["dataset_name"]
     expr_file = task["expr_file"]
-    network_file = task["network_file"]
     
     # (:OUTPUT_ROOT/data_type/)
     output_dir = OUTPUT_ROOT / data_type
@@ -166,7 +154,6 @@ def process_single_dataset(model, vocab, device, model_configs, task):
         # ====================  ====================
         print(f"\n[INFO] Start processing: {data_type}/{dataset_name}")
         print(f"   :{expr_file}")
-        print(f"   Network:{network_file}")
         
         # 
         df = pd.read_csv(expr_file, index_col=0)
@@ -302,15 +289,9 @@ def process_single_dataset(model, vocab, device, model_configs, task):
         interactions_df = interactions_df[interactions_df["Gene1"] != interactions_df["Gene2"]]
         interactions_df = interactions_df.sort_values("EdgeWeight", ascending=False).reset_index(drop=True)
         
-        # Network
-        network_df = pd.read_csv(network_file)
-        target_gene1 = network_df["Gene1"].unique().tolist()
-        filtered_df = interactions_df[interactions_df["Gene1"].isin(target_gene1)]
-        filtered_df = filtered_df.sort_values("EdgeWeight", ascending=False).reset_index(drop=True)
-        
-        # TSV
-        filtered_tsv = output_dir / f"{file_prefix}_filtered.tsv"
-        filtered_df.to_csv(filtered_tsv, sep="\t", index=False)
+        # TSV (no extra filtering)
+        output_tsv = output_dir / f"{file_prefix}.tsv"
+        interactions_df.to_csv(output_tsv, sep="\t", index=False)
         
         # ==================== () ====================
         params = {
@@ -319,13 +300,12 @@ def process_single_dataset(model, vocab, device, model_configs, task):
             "": data_type,
             "Dataset": dataset_name,
             "": str(expr_file),
-            "Network": str(network_file),
-            "": str(filtered_tsv),
+            "": str(output_tsv),
             "": len(genes),
             "": adata.n_obs,
             "": len(interactions_df),
-            "": len(filtered_df),
-            "": f"{len(filtered_df)/len(interactions_df)*100:.2f}%"
+            "": len(interactions_df),
+            "": "100.00%"
         }
         
         # 
@@ -336,7 +316,7 @@ def process_single_dataset(model, vocab, device, model_configs, task):
             pd.DataFrame([params]).to_csv(params_csv, mode="a", header=False, index=False, encoding="utf-8")
         
         print("[INFO] Processing complete:")
-        print(f"   :{filtered_tsv}")
+        print(f"   :{output_tsv}")
         return True
     
     except Exception as e:
@@ -380,7 +360,7 @@ def main():
     print(f":{success_count}")
     print(f":{fail_count}")
     print(f":{OUTPUT_ROOT}")
-    print("[WARN] Only *_filtered.tsv files are generated, not raw .tsv files.")
+    print("[INFO] Full directed edges are exported (self-loop removed only).")
     print("="*80)
 
 if __name__ == "__main__":

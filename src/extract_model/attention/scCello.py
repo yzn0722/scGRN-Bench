@@ -82,7 +82,6 @@ else:
 
 # ()
 INPUT_CSV = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv"
-LABEL_CSV = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
 # (+Dataset)
 TSV_PATH = f"{TYPE_OUTPUT_DIR}/{MODEL_NAME}-{data_type}-{dataset}-gene_attention_edges.tsv"
@@ -189,17 +188,8 @@ start_time = time.time()
 
 # ==================== Label()====================
 print("="*80)
-print(f"[{MODEL_NAME}-{data_type}-{dataset}] Label")
+print(f"[{MODEL_NAME}-{data_type}-{dataset}] Init")
 print("="*80)
-
-if not os.path.exists(LABEL_CSV):
-    raise FileNotFoundError(f"Labeldoes not exist: {LABEL_CSV}")
-
-label_df = pd.read_csv(LABEL_CSV)
-label_gene1 = set(label_df['Gene1'].unique()) if 'Gene1' in label_df.columns else set()
-print(f"✓ Label: {LABEL_CSV}")
-print(f"✓ Label: {label_df.shape}")
-print(f"✓ LabelGene1: {len(label_gene1)}")
 print(f"✓ : {TYPE_OUTPUT_DIR}")
 print(f"✓ : {ALL_PARAMS_CSV}")
 
@@ -481,12 +471,9 @@ for (gene_i, gene_j), stats in gene_pair_attention.items():
 all_edges_df = pd.DataFrame(all_edges)
 print(f"✓ : {len(all_edges_df)}")
 
-# LabelGene1
-filtered_edges_df = all_edges_df[all_edges_df['Gene1'].isin(label_gene1)].sort_values('EdgeWeight', ascending=False)
-print(f"✓ (Gene1Label): {len(filtered_edges_df)} ({len(filtered_edges_df)/len(all_edges_df)*100:.1f}%)")
-
-# 
-filtered_edges_df.to_csv(TSV_PATH, sep='\t', index=False)
+# no extra filtering: keep all directed edges (self-loop already removed)
+all_edges_df = all_edges_df.sort_values('EdgeWeight', ascending=False).reset_index(drop=True)
+all_edges_df.to_csv(TSV_PATH, sep='\t', index=False)
 print(f"✓ : {TSV_PATH}")
 
 
@@ -518,11 +505,11 @@ params = {
     "Model": str(device),
     "": len(gene_pair_attention),
     "": len(all_edges_df),
-    "LabelGene1": len(label_gene1),
-    "(Gene1Label)": len(filtered_edges_df),
-    "(%)": f"{len(filtered_edges_df)/len(all_edges_df)*100:.1f}",
-    "": f"{filtered_edges_df['EdgeWeight'].min():.6f}" if not filtered_edges_df.empty else "0",
-    "": f"{filtered_edges_df['EdgeWeight'].max():.6f}" if not filtered_edges_df.empty else "0",
+    "LabelGene1": 0,
+    "(Gene1Label)": len(all_edges_df),
+    "(%)": "100.0",
+    "": f"{all_edges_df['EdgeWeight'].min():.6f}" if not all_edges_df.empty else "0",
+    "": f"{all_edges_df['EdgeWeight'].max():.6f}" if not all_edges_df.empty else "0",
     "Timestamp()": f"{run_time:.2f}",
     "Timestamp": time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()),
     "": TSV_PATH
@@ -545,7 +532,7 @@ else:
 print(f"\n✓ Dataset:")
 print(f"  - -Dataset: {data_type}-{dataset}")
 print(f"  - : {adata.n_obs}, : {adata.n_vars}")
-print(f"  - : {len(filtered_edges_df)}, Weight range: [{filtered_edges_df['EdgeWeight'].min():.6f}, {filtered_edges_df['EdgeWeight'].max():.6f}]")
+print(f"  - : {len(all_edges_df)}, Weight range: [{all_edges_df['EdgeWeight'].min():.6f}, {all_edges_df['EdgeWeight'].max():.6f}]")
 print(f"  - Timestamp: {run_time:.2f}")
 
 

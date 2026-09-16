@@ -78,8 +78,42 @@ def read_tf_file(file_path):
         print(f"读取文件 {file_path} 时出错: {e}")
         return set()
 
-def load_and_analyze_tfs(file_paths, method_names):
-    """加载TF文件并进行高级分析"""
+def partition_venn3_regions(set_a, set_b, set_c):
+    """
+    Partition the union of three sets into the seven disjoint Venn regions.
+    Returns ordered dict: keys are stable region ids, values are sorted gene lists.
+    """
+    a, b, c = set(set_a), set(set_b), set(set_c)
+    only_a = sorted(a - b - c)
+    only_b = sorted(b - a - c)
+    only_c = sorted(c - a - b)
+    ab_only = sorted((a & b) - c)
+    ac_only = sorted((a & c) - b)
+    bc_only = sorted((b & c) - a)
+    abc = sorted(a & b & c)
+    return {
+        "A only": only_a,
+        "B only": only_b,
+        "C only": only_c,
+        "A∩B (not C)": ab_only,
+        "A∩C (not B)": ac_only,
+        "B∩C (not A)": bc_only,
+        "A∩B∩C": abc,
+    }
+
+
+def load_and_analyze_tfs(
+    file_paths,
+    method_names,
+    *,
+    venn_top_n: int = 100,
+    overlap_top_n: int = 50,
+):
+    """
+    加载 TF 排名表。
+    venn_top_n: 参与韦恩圆与「并集分区」名单的上限（例如 100 = 文件中的全部候选）。
+    overlap_top_n: 用于三交「核心 TF」统计的上限（例如 50 → 与既有 11 个核心 TF 表一致）。
+    """
     results = {}
     
     for path, name in zip(file_paths, method_names):
@@ -119,15 +153,20 @@ def load_and_analyze_tfs(file_paths, method_names):
             for tf in df[tf_col]:
                 jaccard_dict[tf] = 1.0
         
-        # 取前50个TF
-        top_tfs = set(df[tf_col].head(50).tolist())
+        venn_slice = int(min(venn_top_n, len(df)))
+        overlap_slice = int(min(overlap_top_n, len(df)))
+        top_tfs = set(df[tf_col].head(venn_slice).tolist())
+        overlap_basis_tfs = set(df[tf_col].head(overlap_slice).tolist())
         
         results[name] = {
             'data': df,
             'top_tfs': top_tfs,
+            'overlap_basis_tfs': overlap_basis_tfs,
             'jaccard_scores': jaccard_dict,
             'all_tfs': set(df[tf_col].tolist()),
-            'tf_column': tf_col
+            'tf_column': tf_col,
+            'venn_top_n': venn_slice,
+            'overlap_top_n': overlap_slice,
         }
         
         print(f"  前5个TF: {list(top_tfs)[:5]}")
@@ -138,8 +177,11 @@ def calculate_overlap_metrics(results):
     """计算多种重叠指标"""
     metrics = {}
     
-    # 1. 简单重叠数量
-    sets = [results[m]['top_tfs'] for m in results]
+    # 1. 简单重叠数量（默认用 overlap_basis_tfs，与韦恩展示用的 top_tfs 可不同）
+    sets = [
+        results[m].get('overlap_basis_tfs', results[m]['top_tfs'])
+        for m in results
+    ]
     
     # 修复这里：正确计算交集
     if sets:
@@ -151,11 +193,11 @@ def calculate_overlap_metrics(results):
     
     # 2. 加权重叠分数（考虑TF排名）
     weighted_overlap = {}
-    all_tfs_in_top = set()
+    all_tfs_in_overlap_basis = set()
     for s in sets:
-        all_tfs_in_top.update(s)
+        all_tfs_in_overlap_basis.update(s)
     
-    for tf in all_tfs_in_top:
+    for tf in all_tfs_in_overlap_basis:
         ranks = []
         for method in results:
             df = results[method]['data']
@@ -255,35 +297,170 @@ def analyze_regulatory_importance(overlap_tfs, all_results):
     return importance_df
 
 def create_comprehensive_plots(all_results, overlap_metrics, importance_df, output_dir):
-    """创建可视化：仅输出单张韦恩图（无标题）+ 统计表。"""
+    """创建可视化：韦恩图 + 可选「并集分区」全景基因列表（突出三交核心 TF）+ 统计表。"""
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1) 仅创建单独韦恩图（不加标题）
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-
-    # 准备韦恩图数据
     from matplotlib_venn import venn3
-    sets = [all_results[m]['top_tfs'] for m in all_results]
 
+    method_order = list(all_results.keys())
+    sets = [all_results[m]['top_tfs'] for m in method_order]
+    core_highlight = set(overlap_metrics.get("overlap_tfs") or [])
+
+    # 1) 单独韦恩图（无标题）
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
     if len(sets) == 3:
         venn3(
             sets,
-            set_labels=[display_method_name(m) for m in all_results.keys()],
+            set_labels=[display_method_name(m) for m in method_order],
             set_colors=[method_color("att500"), method_color("emb500"), method_color("embhidden500")],
             alpha=0.7,
             ax=ax,
         )
-
-    # 用户要求无标题，关闭坐标轴刻度/边框
     ax.set_xticks([])
     ax.set_yticks([])
     for side in ["top", "right", "bottom", "left"]:
         ax.spines[side].set_visible(False)
-
     plt.tight_layout()
     plt.savefig(output_dir / 'tf_overlap_venn.pdf', bbox_inches='tight')
     plt.close()
+
+    # 2) 全景：韦恩并集内全部 TF（按 7 区划分）；三交核心 TF（与 overlap 表一致）加粗着色
+    if len(sets) == 3:
+        a, b, c = sets[0], sets[1], sets[2]
+        regions = partition_venn3_regions(a, b, c)
+        union_n = len(a | b | c)
+        triple_n = len(regions["A∩B∩C"])
+        venn_n_used = int(all_results[method_order[0]].get("venn_top_n", 100))
+        overlap_n_used = int(all_results[method_order[0]].get("overlap_top_n", 50))
+
+        per_line = 7
+        line_dy = 0.018
+        title_dy = 0.026
+        region_order = [
+            "A∩B∩C",
+            "A∩B (not C)",
+            "A∩C (not B)",
+            "B∩C (not A)",
+            "A only",
+            "B only",
+            "C only",
+        ]
+        label_a = display_method_name(method_order[0])
+        label_b = display_method_name(method_order[1])
+        label_c = display_method_name(method_order[2])
+        pretty_title = {
+            "A∩B∩C": f"Triple overlap ({label_a} ∩ {label_b} ∩ {label_c})",
+            "A∩B (not C)": f"{label_a} ∩ {label_b} (not {label_c})",
+            "A∩C (not B)": f"{label_a} ∩ {label_c} (not {label_b})",
+            "B∩C (not A)": f"{label_b} ∩ {label_c} (not {label_a})",
+            "A only": f"{label_a} only",
+            "B only": f"{label_b} only",
+            "C only": f"{label_c} only",
+        }
+
+        n_lines = 3
+        for rid in region_order:
+            gct = len(regions.get(rid, []))
+            n_lines += 1
+            n_lines += 1 if gct == 0 else int(np.ceil(gct / per_line))
+            n_lines += 1
+        fig_h = float(np.clip(7.5 + 0.095 * n_lines, 10.0, 48.0))
+
+        fig = plt.figure(figsize=(16, fig_h))
+        gs = fig.add_gridspec(1, 2, width_ratios=[1.05, 1.35], wspace=0.08)
+        ax_v = fig.add_subplot(gs[0, 0])
+        ax_txt = fig.add_subplot(gs[0, 1])
+        venn3(
+            sets,
+            set_labels=[display_method_name(m) for m in method_order],
+            set_colors=[method_color("att500"), method_color("emb500"), method_color("embhidden500")],
+            alpha=0.7,
+            ax=ax_v,
+        )
+        ax_v.set_xticks([])
+        ax_v.set_yticks([])
+        for side in ["top", "right", "bottom", "left"]:
+            ax_v.spines[side].set_visible(False)
+
+        ax_txt.axis("off")
+        accent = COLORS.get("Overlap", method_color("emb500"))
+        dim = "#555555"
+        header = (
+            f"Venn union: {union_n} TFs (each method top-{venn_n_used}; "
+            f"{label_a} / {label_b} / {label_c}).\n"
+            f"Triple overlap (diagram): {triple_n} TF(s). "
+            f"Core highlight: top-{overlap_n_used} intersection, {len(core_highlight)} TF(s) "
+            f"(bold colored when listed in triple-overlap region).\n"
+        )
+        ax_txt.text(
+            0.0,
+            1.0,
+            header,
+            transform=ax_txt.transAxes,
+            va="top",
+            ha="left",
+            fontsize=11,
+            color=dim,
+            linespacing=1.35,
+        )
+
+        y_cursor = 0.965
+        body_fs = 7.5
+        title_fs = 9.0
+        for rid in region_order:
+            genes = regions.get(rid, [])
+            title = pretty_title.get(rid, rid)
+            is_core_block = rid == "A∩B∩C"
+            ax_txt.text(
+                0.0,
+                y_cursor,
+                f"{title}  (n={len(genes)})",
+                transform=ax_txt.transAxes,
+                va="top",
+                ha="left",
+                fontsize=title_fs,
+                fontweight="bold",
+                color=accent if is_core_block else dim,
+            )
+            y_cursor -= title_dy
+            if not genes:
+                ax_txt.text(
+                    0.02,
+                    y_cursor,
+                    "(none)",
+                    transform=ax_txt.transAxes,
+                    va="top",
+                    ha="left",
+                    fontsize=body_fs,
+                    color="#999999",
+                )
+                y_cursor -= 0.045
+                continue
+            genes_sorted = sorted(genes)
+            for i in range(0, len(genes_sorted), per_line):
+                chunk = genes_sorted[i : i + per_line]
+                x0 = 0.02
+                x_pad = 0.132
+                for j, g in enumerate(chunk):
+                    is_core = is_core_block and (g in core_highlight)
+                    ax_txt.text(
+                        x0 + j * x_pad,
+                        y_cursor,
+                        g,
+                        transform=ax_txt.transAxes,
+                        va="top",
+                        ha="left",
+                        fontsize=body_fs + (1.2 if is_core else 0.0),
+                        fontweight="bold" if is_core else "normal",
+                        color=accent if is_core else "#222222",
+                    )
+                y_cursor -= line_dy
+            y_cursor -= 0.012
+
+        plt.tight_layout()
+        plt.savefig(output_dir / "tf_overlap_venn_union_catalog.pdf", bbox_inches="tight")
+        plt.close()
     
     # NOTE: 用户要求只输出一张图，因此这里不再单独生成 tf_rank_heatmap。
     
@@ -355,11 +532,13 @@ def create_comprehensive_plots(all_results, overlap_metrics, importance_df, outp
 def main():
     # Prefer local fig3/tf_overlap outputs (generated by plot_tf_topn_overlap_heatmap.py)
     dataset = "hESC"
-    top_n = 100
+    csv_top = 100
+    venn_top_n = 100
+    overlap_top_n = 50
     overlap_dir = Path(__file__).resolve().parent / "tf_overlap"
     method_names = ["scGPT-att500", "scGPT-emb500", "scGPT-embhidden500"]
     file_paths = [
-        overlap_dir / f"tf_top{top_n}_jaccard_{dataset}_top{top_n}_TFs_{m}.csv"
+        overlap_dir / f"tf_top{csv_top}_jaccard_{dataset}_top{csv_top}_TFs_{m}.csv"
         for m in method_names
     ]
     
@@ -372,7 +551,12 @@ def main():
     
     # 1. 加载和分析数据
     print("\nStep 1: 加载和分析TF数据...")
-    all_results = load_and_analyze_tfs(file_paths, method_names)
+    all_results = load_and_analyze_tfs(
+        file_paths,
+        method_names,
+        venn_top_n=venn_top_n,
+        overlap_top_n=overlap_top_n,
+    )
     
     # 2. 计算重叠指标
     print("\nStep 2: 计算重叠指标...")
@@ -418,7 +602,8 @@ def main():
     
     print(f"\n所有结果已保存到: {output_dir}")
     print("\n主要输出文件:")
-    print(f"  - tf_overlap_venn.png/pdf: 单独韦恩图（无标题）")
+    print(f"  - tf_overlap_venn.pdf: 单独韦恩图（无标题）")
+    print(f"  - tf_overlap_venn_union_catalog.pdf: 韦恩 + 并集分区全基因列表（三交核心 TF 突出）")
     print(f"  - tf_overlap_detailed_statistics.csv: 详细统计表格")
     
     # 6. 生成简单的文本报告

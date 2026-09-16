@@ -9,12 +9,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import re
+import glob
+import pandas as pd
 from typing import Dict, List, Optional, Tuple
 import warnings
 warnings.filterwarnings('ignore')
 from fig4_palette import apply_fig4_style, model_color
 
 apply_fig4_style()
+
+TOP_PERCENT = 0.3
 
 def _to_final(value) -> float:
     """取一条 accuracy 曲线的 final accuracy（最后一个值）"""
@@ -114,6 +118,60 @@ def extract_model_name_from_path(filepath: str) -> str:
     # 如果都匹配不上，返回简化后的目录名
     return dirname.replace('_', ' ').title()
 
+def calculate_accuracy_from_csv(file_path: str, use_top30: bool = True, top_percent: float = TOP_PERCENT) -> Optional[float]:
+    """从 gene_result.csv 计算普通准确率（dir_true 与 dir_pred 一致比例）。"""
+    if not os.path.exists(file_path):
+        return None
+    try:
+        df = pd.read_csv(file_path)
+    except Exception:
+        return None
+    required_cols = ["dir_true", "dir_pred"]
+    if not all(c in df.columns for c in required_cols):
+        return None
+
+    if use_top30 and "delta_true" in df.columns:
+        df = df.copy()
+        df["abs_delta_true"] = pd.to_numeric(df["delta_true"], errors="coerce").abs().fillna(0.0)
+        n_top = max(1, int(np.ceil(float(top_percent) * len(df))))
+        df = df.nlargest(n_top, "abs_delta_true")
+
+    if len(df) == 0:
+        return None
+    y_true = df["dir_true"].astype(str).str.strip().str.lower()
+    y_pred = df["dir_pred"].astype(str).str.strip().str.lower()
+    return float((y_true == y_pred).mean())
+
+
+def extract_random_mean_std_from_csv(datasets: List[str], random_pattern: str) -> Tuple[Dict[str, float], Dict[str, float]]:
+    """按数据集聚合 random 多次 run 的普通准确率均值与标准差。"""
+    means: Dict[str, float] = {}
+    stds: Dict[str, float] = {}
+    for ds in datasets:
+        files = sorted(glob.glob(random_pattern.format(dataset=ds)))
+        vals: List[float] = []
+        for fp in files:
+            acc = calculate_accuracy_from_csv(fp, use_top30=True, top_percent=TOP_PERCENT)
+            if acc is not None and np.isfinite(acc):
+                vals.append(float(acc))
+        if vals:
+            arr = np.asarray(vals, dtype=np.float64)
+            means[ds] = float(np.mean(arr))
+            stds[ds] = float(np.std(arr, ddof=1)) if len(arr) > 1 else 0.0
+    return means, stds
+
+
+def extract_single_from_csv(datasets: List[str], file_pattern: str) -> Dict[str, float]:
+    """按数据集提取单次结果普通准确率。"""
+    out: Dict[str, float] = {}
+    for ds in datasets:
+        fp = file_pattern.format(dataset=ds)
+        acc = calculate_accuracy_from_csv(fp, use_top30=True, top_percent=TOP_PERCENT)
+        if acc is not None and np.isfinite(acc):
+            out[ds] = float(acc)
+    return out
+
+
 def plot_accuracy_comparison(
     json_path1: str,
     json_path2: str,
@@ -144,21 +202,11 @@ def plot_accuracy_comparison(
     print(f"  模型1 ({model1_name}): {json_path1}")
     print(f"  模型2 ({model2_name}): {json_path2}")
     
-    # 2. 加载JSON数据
-    print(f"\n📥 正在加载数据...")
-    data1 = load_json_safely(json_path1)
-    data2 = load_json_safely(json_path2)
-    
-    if data1 is None or data2 is None:
-        print("❌ 数据加载失败，程序退出")
-        return
-    
-    # 3. 提取准确率数据
-    print(f"\n📊 提取准确率数据...")
-    # 模型1默认是 random 多次结果：提取 mean±std（基于每次run的final accuracy）
-    accuracies1, stds1 = extract_random_mean_std(data1)
-    # 模型2默认是 scGPT 本次结果：提取 final accuracy
-    accuracies2 = extract_final_accuracy(data2)
+    # 2. 计算普通 accuracy（top30）数据
+    print(f"\n📥 正在计算普通准确率（top30）...")
+    datasets_order = ["hESC", "hHep", "mDC", "mHSC-E", "mHSC-GM", "mHSC-L"]
+    accuracies1, stds1 = extract_random_mean_std_from_csv(datasets_order, json_path1)
+    accuracies2 = extract_single_from_csv(datasets_order, json_path2)
     
     print(f"  {model1_name} 提取到的数据集: {list(accuracies1.keys())}")
     print(f"  {model2_name} 提取到的数据集: {list(accuracies2.keys())}")
@@ -298,20 +346,20 @@ def plot_accuracy_comparison(
 
 def main():
     """主函数"""
-    # 你的文件路径
-    json_path1 = "/mnt/10T/yzn/FoundBench/FBplot/fig4/results_multidataset_pseudotime_227_random/accuracy_curves.json"
-    json_path2 = "/mnt/10T/yzn/FoundBench/FBplot/fig4/interation/scgpt_accuracy_curves.json"
+    # 使用 gene_result.csv 计算普通 accuracy（top30）
+    json_path1 = "/mnt/10T/yzn/scGRN-Bench/FBplot/fig4/results_multidataset_pseudotime_227_random/{dataset}_gene_result_run*.csv"
+    json_path2 = "/mnt/10T/yzn/benchmark_GRN/pre_scgpt/results_multidataset_pseudotime_227/{dataset}_gene_result.csv"
     
     # 输出文件名
     output_pdf = "accuracy_comparison.pdf"
     
     # 检查文件是否存在
-    if not os.path.exists(json_path1):
-        print(f"❌ 错误: 文件不存在 - {json_path1}")
+    if not glob.glob(json_path1.format(dataset="hESC")):
+        print(f"❌ 错误: 未找到 random 文件 - {json_path1}")
         return
     
-    if not os.path.exists(json_path2):
-        print(f"❌ 错误: 文件不存在 - {json_path2}")
+    if not os.path.exists(json_path2.format(dataset="hESC")):
+        print(f"❌ 错误: 未找到 scGPT 文件 - {json_path2}")
         return
     
     # 绘制图表

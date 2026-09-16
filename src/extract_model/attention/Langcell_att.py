@@ -63,7 +63,6 @@ elif data_type == "Non_CHIP" or data_type == "STRING":
 
 # ()
 csv_path = Path(f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-ExpressionData.csv")
-network_path = f"{INPUT_ROOT}/{input_subdir}/{dataset}{file_suffix}-network.csv"
 
 # ()
 TYPE_OUTPUT_DIR = OUTPUT_ROOT / data_type
@@ -86,7 +85,6 @@ print("="*80)
 print(f"Model: {MODEL_PATH}")
 print(f"Vocabulary: {VOCAB_PATH}")
 print(f": {csv_path}")
-print(f": {network_path}")
 print(f": {TYPE_OUTPUT_DIR}")
 print(f": {ALL_PARAMS_CSV}")
 print(f": {TEMP_DIR}")
@@ -218,7 +216,6 @@ class LangCellAttentionExtractor:
             "Model": MODEL_PATH,
             "Vocabulary": VOCAB_PATH,
             "": str(csv_path),
-            "": network_path,
             "Median": USE_MEDIAN_FILTER,
             "": TARGET_LAYER,
             "Batch Size": BATCH_SIZE,
@@ -226,38 +223,10 @@ class LangCellAttentionExtractor:
             "Timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
         
-        # 
-        self._load_reference_network()
         print(f"Using device: {self.device}")
         if not USE_MEDIAN_FILTER:
             print("[WARN] Median filtering disabled - keep all non-zero expressed genes")
-        if self.reference_genes:
-            print(f"Gene1: {self.reference_gene1_count}")
-        self.stats["LabelGene1"] = self.reference_gene1_count
-
-    def _load_reference_network(self):
-        """,Gene1"""
-        try:
-            if not os.path.exists(network_path):
-                print(f"[WARN] Reference network file not found: {network_path}")
-                return
-            
-            df_ref = pd.read_csv(network_path)
-            print(f": {df_ref.shape}")
-            
-            if 'Gene1' not in df_ref.columns:
-                raise ValueError("Gene1")
-            
-            self.reference_genes = set(df_ref['Gene1'].unique())
-            self.reference_genes = {gene.strip() for gene in self.reference_genes if pd.notna(gene)}
-            self.reference_gene1_count = len(self.reference_genes)
-            print(f"Gene1 {self.reference_gene1_count} ")
-        
-        except Exception as e:
-            print(f"[WARN] Failed to load reference network: {str(e)}")
-            print("   ()")
-            self.reference_genes = None
-            self.reference_gene1_count = 0
+        self.stats["LabelGene1"] = 0
 
     def load_vocab(self):
         """Load vocabulary and gene mappings"""
@@ -648,7 +617,7 @@ class LangCellAttentionExtractor:
         # 
         self.stats[""] = tsv_gene_pair_count
         self.stats["(Gene1Label)"] = tsv_gene_pair_count  # LangCell
-        self.stats["(%)"] = f"100.0" if self.reference_genes else f"{(tsv_gene_pair_count/(filtered_gene_count*(filtered_gene_count-1)))*100:.1f}"
+        self.stats["(%)"] = f"{(tsv_gene_pair_count/(filtered_gene_count*(filtered_gene_count-1)))*100:.1f}" if filtered_gene_count > 1 else "0.0"
         self.stats["Gene1"] = covered_reference_gene1_count
         self.stats["Gene1(%)"] = f"{(covered_reference_gene1_count/self.reference_gene1_count)*100:.1f}" if self.reference_gene1_count > 0 else "0.0"
         self.stats[""] = f"{np.nanmin(attention_matrix):.6f}" if attention_matrix is not None else "0.0"
@@ -671,28 +640,21 @@ class LangCellAttentionExtractor:
         for i in tqdm(range(n_genes), desc="Preparing TSV data"):
             gene1 = gene_names[i]
             
-            # Gene1
-            if self.reference_genes and gene1 not in self.reference_genes:
-                continue
-            if self.reference_genes:
-                covered_reference_genes.add(gene1)
-            
             for j in range(n_genes):
                 gene2 = gene_names[j]
                 if gene1 == gene2:  # 
                     continue
                 
                 score = attention_matrix[i, j]
-                if score > 0:  # 
-                    tsv_data.append({
-                        'Gene1': gene1,
-                        'Gene2': gene2,
-                        'Attention_score': round(score, 6)
-                    })
+                tsv_data.append({
+                    'Gene1': gene1,
+                    'Gene2': gene2,
+                    'EdgeWeight': round(float(score), 6)
+                })
         
         # DataFrame
         df_tsv = pd.DataFrame(tsv_data)
-        df_tsv = df_tsv.sort_values('Attention_score', ascending=False).reset_index(drop=True)
+        df_tsv = df_tsv.sort_values('EdgeWeight', ascending=False).reset_index(drop=True)
         
         # 
         df_tsv.to_csv(interactions_tsv_path, sep='\t', index=False, header=True)
@@ -706,10 +668,7 @@ class LangCellAttentionExtractor:
         print(f"  : {gene_pair_count:,}")
         print(f"  Top 5:")
         for _, row in df_tsv.head().iterrows():
-            print(f"    {row['Gene1']} - {row['Gene2']}: {row['Attention_score']:.6f}")
-        
-        if self.reference_genes:
-            print(f"  Gene1: {covered_reference_gene1_count}/{self.reference_gene1_count} ({reference_coverage_percentage:.1f}%)")
+            print(f"    {row['Gene1']} - {row['Gene2']}: {row['EdgeWeight']:.6f}")
         
         return {
             "tsv_path": str(interactions_tsv_path),

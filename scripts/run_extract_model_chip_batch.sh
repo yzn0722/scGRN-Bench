@@ -17,7 +17,7 @@ set -euo pipefail
 #   SCFOUNDATION_ROOT         default: $DATA_ROOT/scfoundation
 #   SCFOUNDATION_MODEL_PATH   default: $SCFOUNDATION_ROOT/model/models/models.ckpt
 #   SCFOUNDATION_VOCAB_PATH   default: $SCFOUNDATION_ROOT/model/OS_scRNA_gene_index.19264.tsv
-#   SCCELLO_REPO_DIR          default: $DATA_ROOT/sc_foundation_evals
+#   SCCELLO_REPO_DIR          default: $PROJECT_ROOT/models/sc_foundation_evals
 #   DYNAMIC_EXPR_ROOT         default: $DATA_ROOT/input_process
 #   DYNAMIC_PT_ROOT           default: $DATA_ROOT/PseudoTime
 #   RUN_EMBEDDING             default: 1
@@ -37,7 +37,7 @@ SCGPT_MODEL_DIR="${SCGPT_MODEL_DIR:-$DATA_ROOT/scgpt/scgpt_human}"
 SCFOUNDATION_ROOT="${SCFOUNDATION_ROOT:-$DATA_ROOT/scfoundation}"
 SCFOUNDATION_MODEL_PATH="${SCFOUNDATION_MODEL_PATH:-$SCFOUNDATION_ROOT/model/models/models.ckpt}"
 SCFOUNDATION_VOCAB_PATH="${SCFOUNDATION_VOCAB_PATH:-$SCFOUNDATION_ROOT/model/OS_scRNA_gene_index.19264.tsv}"
-SCCELLO_REPO_DIR="${SCCELLO_REPO_DIR:-$DATA_ROOT/sc_foundation_evals}"
+SCCELLO_REPO_DIR="${SCCELLO_REPO_DIR:-$PROJECT_ROOT/models/sc_foundation_evals}"
 DYNAMIC_EXPR_ROOT="${DYNAMIC_EXPR_ROOT:-$DATA_ROOT/input_process}"
 DYNAMIC_PT_ROOT="${DYNAMIC_PT_ROOT:-$DATA_ROOT/PseudoTime}"
 

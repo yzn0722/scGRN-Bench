@@ -43,7 +43,7 @@ AXIS_LINEWIDTH = 1.2
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 DATA_DIR = SCRIPT_DIR / "interation"
-DATASET = "hESC"  # 单数据集名，或 "all" 批量绘制全部数据集
+DATASET = "all"  # 单数据集名，或 "all" 批量绘制全部数据集
 FIGSIZE = (5.0, 5.0)
 YLIM: Tuple[float, float] | None = None
 LEGEND_NCOL = 2
@@ -117,17 +117,17 @@ def plot_curves(
         )
 
     ax.set_xlabel("Iteration", fontsize=16)
-    ax.set_ylabel("Direction accuracy (Top-30%)", fontsize=16)
+    ax.set_ylabel("Accuracy(%)", fontsize=16)
     #ax.set_title(dataset, fontsize=16, color="#000000", pad=10)
 
     ax.set_xlim(1, int(MAX_ITER_TO_PLOT))
     # show only odd-number ticks up to 11
     ax.set_xticks(np.arange(1, int(MAX_ITER_TO_PLOT) + 1, 2))
     if ylim is None:
-        ax.set_ylim(45.0, 100.0)
+        ax.set_ylim(0.0, 100.0)
     else:
         ax.set_ylim(float(ylim[0]), float(ylim[1]))
-    ax.set_yticks(np.arange(50, 101, 10))
+    ax.set_yticks(np.arange(0, 101, 20))
 
     ax.grid(False)
 
@@ -139,7 +139,7 @@ def plot_curves(
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     # 坐标轴刻度统一为纯数字（不加百分号）
-    ax.tick_params(width=AXIS_LINEWIDTH, length=0, labelsize=TICK_LABEL_SIZE, pad=2)
+    #ax.tick_params(width=AXIS_LINEWIDTH, length=0, labelsize=TICK_LABEL_SIZE, pad=2)
 
     # legend
     ax.legend(

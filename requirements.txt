@@ -52,14 +52,18 @@ mygene
 #
 # 1) singlecell.tar.gz (conda-packed environment)
 # If you have a conda-packed environment tarball named `singlecell.tar.gz`,
-# you can unpack it into your local conda envs directory. Example:
+# unpack it into your conda envs directory (do NOT pip-install the tarball):
 #
-#   mkdir -p "${CONDA_PREFIX%/envs/*}/envs/singlecell"
-#   tar -xzvf singlecell.tar.gz -C "${CONDA_PREFIX%/envs/*}/envs/singlecell"
+#   mkdir -p "$HOME/miniconda3/envs/singlecell"
+#   tar -xzf singlecell.tar.gz -C "$HOME/miniconda3/envs/singlecell"
 #   conda activate singlecell
+#   conda-unpack   # if available
 #
-# Alternatively, you can use your own environment and install the Python
-# dependencies you need.
+# Full install steps: see README.md → Environment Setup.
+#
+# Alternatively, create a fresh env and:
+#   python -m pip install -r requirements.txt
+#   python -m pip install torch scanpy   # as needed
 #
 # 2) Model checkpoints (large files)
 # These checkpoints can be many GB and should be placed under this repository's

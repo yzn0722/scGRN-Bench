@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import networkx as nx
+import argparse
 from pathlib import Path
 from typing import Optional, Set
 import warnings
@@ -554,8 +555,53 @@ def normalize_metrics(all_metrics, ref_name: str = REAL_NETWORK):
     return normalized
 
 
+def normalize_metrics_zscore_similarity(all_metrics, ref_name: str = REAL_NETWORK):
+    """
+    Z-score similarity to reference network (STRING):
+    1) For each metric, compute z-score across all available models.
+    2) Compute distance to STRING in z-space: d = |z_model - z_ref|.
+    3) Convert to similarity in (0,1] via s = 1 / (1 + d).
+       STRING is fixed at 1.0 on all axes.
+    """
+    if ref_name not in all_metrics:
+        return normalize_metrics_minmax_fallback(all_metrics)
+
+    normalized: dict = {m: {} for m in all_metrics.keys()}
+    for metric in METRICS:
+        vals = []
+        keys = []
+        for k, mv in all_metrics.items():
+            if metric in mv:
+                vals.append(_finite_float(mv.get(metric, 0.0)))
+                keys.append(k)
+        if not vals:
+            for k in normalized.keys():
+                normalized[k][metric] = 0.0
+            continue
+
+        arr = np.array(vals, dtype=float)
+        mu = float(np.mean(arr))
+        sigma = float(np.std(arr))
+        if sigma <= 1e-12:
+            # All models are identical on this metric.
+            for k in normalized.keys():
+                normalized[k][metric] = 1.0
+            continue
+
+        z = {k: (v - mu) / sigma for k, v in zip(keys, arr)}
+        z_ref = z.get(ref_name, 0.0)
+        for k in normalized.keys():
+            zk = z.get(k, z_ref)
+            d = abs(zk - z_ref)
+            s = 1.0 / (1.0 + d)  # in (0,1], avoids hard zero
+            normalized[k][metric] = float(np.clip(s, 0.0, 1.0))
+        normalized[ref_name][metric] = 1.0
+
+    return normalized
+
+
 def normalize_metrics_minmax_fallback(all_metrics):
-    """无参考网络时的兜底：全体 min-max 到 [0,1]。"""
+    """按每个指标在全部网络（含 STRING）上做 min-max 到 [0,1]。"""
     normalized = {}
     for model, metrics in all_metrics.items():
         norm_metrics = {}
@@ -596,7 +642,7 @@ def plot_radar_chart(normalized_metrics, model_colors, dataset_name: str, extrac
     # 径向网格：浅色同心圆
     ax.set_ylim(0, 1.0)
     ax.set_yticks([0.2, 0.4, 0.6, 0.8, 1.0])
-    ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], fontsize=text_size, color='#000000')
+    ax.set_yticklabels(['0.2', '0.4', '0.6', '0.8', '1.0'], fontsize=text_size, color='black')
     ax.yaxis.grid(False)
     ax.xaxis.grid(False)
 
@@ -660,18 +706,18 @@ def plot_radar_chart(normalized_metrics, model_colors, dataset_name: str, extrac
     ax.set_xticklabels(
         METRICS_DISPLAY,
         fontsize=text_size,
-        fontweight='normal',
-        color='#000000',
+        #fontweight='normal',
+        color='black',
     )
 
     # Title: always keep (user requirement)
     title_text = EXTRACTION_DISPLAY.get(extraction, extraction)
     ax.set_title(
         title_text,
-        fontsize=text_size,
-        fontweight='normal',
-        pad=16,
-        color='#000000',
+        fontsize=18,
+        #fontweight='normal',
+        #pad=16,
+        color='black',
     )
 
     # Legend: only keep for hidden extraction
@@ -686,7 +732,7 @@ def plot_radar_chart(normalized_metrics, model_colors, dataset_name: str, extrac
             borderaxespad=0.0,
         )
         for text in leg.get_texts():
-            text.set_color('#000000')
+            text.set_color('black')
 
     fig.patch.set_facecolor('white')
     ax.set_facecolor('#FAFAFA')
@@ -705,6 +751,27 @@ def plot_radar_chart(normalized_metrics, model_colors, dataset_name: str, extrac
 
 # ------------------- 主函数 -------------------
 def main():
+    parser = argparse.ArgumentParser(description="Plot radar topology metrics with optional undirected mode.")
+    parser.add_argument(
+        "--undirected",
+        action="store_true",
+        help="Use undirected graph mode for all topology metrics (consistent with undirected CCDF).",
+    )
+    parser.add_argument(
+        "--norm-method",
+        type=str,
+        default="zscore",
+        choices=("linear", "zscore", "minmax"),
+        help="Normalization to STRING for radar values.",
+    )
+    args = parser.parse_args()
+
+    global STRING_DIRECTED, OUTPUT_DIR
+    if args.undirected:
+        STRING_DIRECTED = False
+        OUTPUT_DIR = Path(__file__).resolve().parent / "output_hESC_radar_topology_undirected"
+        OUTPUT_DIR.mkdir(exist_ok=True)
+
     print("=" * 60)
     print("Network Topology Radar Chart - Real Data Analysis")
     print(f"Dataset: {DATASET}")
@@ -713,6 +780,7 @@ def main():
         f"Predicted edges vs STRING: EDGE_FILTER_MODE={EDGE_FILTER_MODE!r}, "
         f"STRING_EDGE_BUDGET={STRING_EDGE_BUDGET!r}, STRING_DIRECTED={STRING_DIRECTED}"
     )
+    print(f"Normalization method: {args.norm_method}")
     print(
         "(若以前用无向合并，A→B 与 B→A 会算成一条边，边数约为有向唯一对的一半)"
     )
@@ -783,7 +851,12 @@ def main():
             continue
 
         print("\nNormalizing to STRING reference ...")
-        normalized_metrics = normalize_metrics(all_metrics, ref_name=REAL_NETWORK)
+        if args.norm_method == "zscore":
+            normalized_metrics = normalize_metrics_zscore_similarity(all_metrics, ref_name=REAL_NETWORK)
+        elif args.norm_method == "minmax":
+            normalized_metrics = normalize_metrics_minmax_fallback(all_metrics)
+        else:
+            normalized_metrics = normalize_metrics(all_metrics, ref_name=REAL_NETWORK)
         model_colors = {m: MODEL_CONFIGS[m]["color"] for m in MODEL_ORDER}
         plot_radar_chart(normalized_metrics, model_colors, DATASET, extraction, REAL_NETWORK)
 

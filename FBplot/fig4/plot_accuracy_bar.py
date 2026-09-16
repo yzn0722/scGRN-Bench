@@ -241,17 +241,13 @@
 
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Plot direction accuracy (final iteration) for all benchmark models as a grouped bar chart.
-顶会NPG格式 | 固定配色 | 右侧单列图例 | 专业排版
-"""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -259,7 +255,16 @@ from fig4_palette import apply_fig4_style, model_color, FIG4_FIGSIZE
 
 apply_fig4_style()
 
+
 # ====================== 工具函数 ======================
+def parse_exclude_datasets(s: str) -> Set[str]:
+    """Parse comma-separated dataset names to exclude. Empty or 'none' => exclude nothing."""
+    raw = (s or "").strip()
+    if not raw or raw.lower() == "none":
+        return set()
+    return {p.strip() for p in raw.split(",") if p.strip()}
+
+
 def load_final_accuracies(path: Union[str, Path]) -> Dict[str, float]:
     """加载accuracy_curves.json，提取每个数据集的最终迭代准确率"""
     path = Path(path)
@@ -306,9 +311,15 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Skip missing JSON files instead of raising",
     )
-    p.add_argument("--figwidth", type=float, default=5.0, help="Figure width (inches)")
+    p.add_argument("--figwidth", type=float, default=10.0, help="Figure width (inches)")
     p.add_argument("--figheight", type=float, default=5.0, help="Figure height (inches)")
-    
+    p.add_argument(
+        "--exclude-datasets",
+        type=str,
+        default="mDC",
+        help="Comma-separated dataset IDs to omit from the plot. Default: mDC. Use empty string or 'none' to exclude nothing.",
+    )
+
     # 模型路径覆盖参数
     for key, _ in [
         ("geneformer", "geneformer_accuracy_curves_6datasets.json"),
@@ -361,7 +372,8 @@ def main() -> None:
     all_datasets: set[str] = set()
     for d in data.values():
         all_datasets.update(d.keys())
-    datasets = sorted(all_datasets)
+    excluded = parse_exclude_datasets(args.exclude_datasets)
+    datasets = sorted(ds for ds in all_datasets if ds not in excluded)
     if not datasets:
         raise RuntimeError("No dataset keys found in accuracy_curves.json files.")
 
@@ -402,7 +414,7 @@ def main() -> None:
     ax.axhline(50, color="#888888", linestyle="--", linewidth=1.0, alpha=0.7, zorder=2)
     
     # 坐标轴设置
-    ax.set_ylabel("Direction Accuracy (%)", fontsize=16, fontweight="normal")
+    ax.set_ylabel("Accuracy (%)", fontsize=16, fontweight="normal")
     ax.set_xticks(x)
     ax.set_xticklabels(datasets, rotation=0, ha="center", fontsize=14)
     ax.tick_params(axis="x", labelsize=14, length=0)
@@ -410,19 +422,30 @@ def main() -> None:
     ax.set_ylim(0, 100)
     ax.set_yticks(np.arange(0, 101, 20))  # 0,20,40,60,80,100刻度
     
-    # 网格线（仅y轴，浅色）
-    ax.grid(axis="y", linestyle="-", alpha=0.3, zorder=1)
+    # 不显示背景网格线（与 balanced-accuracy 图一致）
+    ax.grid(False)
     
-    # 底部单行图例
+    # 底部图例（与 balanced-accuracy 图风格一致）
+    # ax.legend(
+    #     frameon=False,
+    #     ncol=max(1, n_methods),
+    #     loc="upper center",
+    #     bbox_to_anchor=(0.5, -0.1),
+    #     fontsize=14,
+    #     borderaxespad=0
+    # )
     ax.legend(
-        frameon=False,
-        ncol=max(1, n_methods),
-        loc="upper center",
-        bbox_to_anchor=(0.5, -0.16),
-        fontsize=14,
-        borderaxespad=0
-    )
-    
+    frameon=False,
+    loc="upper center",
+    bbox_to_anchor=(0.5, -0.06),
+    ncol=100,
+    fontsize=14,
+    handlelength=1.2,
+    handletextpad=0.3,
+    columnspacing=0.4,
+    borderaxespad=0
+)
+ 
     # 隐藏上/右边框
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -430,7 +453,7 @@ def main() -> None:
     ax.spines["bottom"].set_linewidth(0.8)
 
     # 调整布局，给底部图例留出空间
-    plt.subplots_adjust(bottom=0.24)
+    plt.subplots_adjust(bottom=0.1)
 
     # 保存图片
     script_dir = Path(__file__).resolve().parent
@@ -444,7 +467,7 @@ def main() -> None:
     print(f"✅ Saved: {out_png.resolve()}")
     print(f"📊 Models plotted ({n_methods}): {', '.join(methods_order)}")
     print(f"🎨 Fixed color scheme applied (matches your reference chart)")
-    print(f"📐 NPG top-conference format: right-side single-column legend")
+    print(f"📐 NPG format aligned to balanced-accuracy bar style")
 
 
 if __name__ == "__main__":

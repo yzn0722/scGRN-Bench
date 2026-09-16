@@ -147,7 +147,7 @@ for ds_name, ds_cfg in DATASETS.items():
             c=COLOR_EARLY,
             edgecolors="none",
             linewidths=0,
-            label="Early",
+            label="Observed early cells",
             zorder=3,
         )
         # 真实晚期细胞（蓝色）
@@ -159,7 +159,7 @@ for ds_name, ds_cfg in DATASETS.items():
             c=COLOR_LATE,
             edgecolors="none",
             linewidths=0,
-            label="Late",
+            label="Observed late cells",
             zorder=3,
         )
         # 预测晚期细胞（玫红）→ 只绘制有预测数据的部分
@@ -172,7 +172,7 @@ for ds_name, ds_cfg in DATASETS.items():
                 c=COLOR_PRED_LATE,
                 edgecolors="none",
                 linewidths=0,
-                label="Predicted Late",
+                label="Predicted late cells",
                 zorder=4,
             )
 
@@ -189,15 +189,15 @@ for ds_name, ds_cfg in DATASETS.items():
 
         # 图表美化
         ax.set_xlabel("Pseudotime", fontsize=AXIS_LABEL_SIZE)
-        ax.set_ylabel("Mean Gene Expression", fontsize=AXIS_LABEL_SIZE)
+        ax.set_ylabel("Mean Gene Expression", fontsize=AXIS_LABEL_SIZE,labelpad=12)
         
-        ax.set_title(ds_name, fontsize=16, color="#000000", pad=10)#给每个图片加标题
+        #ax.set_title(ds_name, fontsize=16, color="#000000", pad=10)#给每个图片加标题
         ax.grid(False)
 
         # spine/ticks: align with fig4 scatter style
         for side in ["bottom", "left"]:
             ax.spines[side].set_visible(True)
-            ax.spines[side].set_linewidth(0.8)
+            #ax.spines[side].set_linewidth(0.8)
             ax.spines[side].set_color("black")
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)

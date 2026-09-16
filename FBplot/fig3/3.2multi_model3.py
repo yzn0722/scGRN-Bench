@@ -228,7 +228,7 @@ def plot_three_methods_grn_curve(
             fontweight='normal',
             pad=20,
         )
-    plt.legend(loc='upper right', fontsize=text_size, frameon=True)
+    plt.legend(loc='upper right', fontsize=text_size, frameon=False)
     plt.grid(False)
     plt.xticks(np.arange(1, len(percents) + 1), [str(i) for i in range(1, len(percents) + 1)], rotation=0)
     plt.ylim(0, min(1.0, merged_data['Precision'].max() + 0.1))
@@ -247,12 +247,12 @@ def plot_three_methods_grn_curve(
 def parse_args():
     p = argparse.ArgumentParser(description="Plot scGPT three-method GRN curve for one dataset.")
     p.add_argument("--dataset", type=str, default="hESC", help="Dataset name, e.g. hESC / hHep / mDC")
-    p.add_argument("--figsize", type=str, default="6,6", help="Figure size W,H (default: 6,6)")
+    p.add_argument("--figsize", type=str, default="6,4", help="Figure size W,H (default: 6,6)")
     p.add_argument("--show-title", action="store_true", help="Show figure title (default: off)")
     p.add_argument(
         "--percents",
         type=str,
-        default="1,1.5,2,2.5,3,3.5,4,8",
+        default="1,2,3,4,5,6,7,8",
         help="Comma-separated percent values",
     )
     return p.parse_args()
@@ -271,7 +271,7 @@ if __name__ == "__main__":
         ("embhidden500", f"/mnt/10T/yzn/benchmark_GRN/evl_omipath/output_embhidden500/scgpt/scGPT_{dataset_name}.tsv"),
         ("att500", f"/mnt/10T/yzn/benchmark_GRN/evl_omipath/output_att500/scgpt/scgpt_{dataset_name}.tsv"),
     ]
-    w, h = (8.0, 6.0)
+    w, h = (7.0, 5.0)
     custom_percents = [float(x) for x in str(args.percents).split(",") if str(x).strip()]
 
     plot_three_methods_grn_curve(

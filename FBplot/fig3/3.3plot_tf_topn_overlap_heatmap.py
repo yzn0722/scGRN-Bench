@@ -242,7 +242,7 @@ def create_simple_raincloud_plot(combined_df: pd.DataFrame, methods: List[str],
     method_colors = {m: display_method_color(m) for m in methods}
     
     # 创建图形
-    fig, ax = plt.subplots(figsize=(8, 6), dpi=300)
+    fig, ax = plt.subplots(figsize=(7, 5), dpi=300)
     
     # 绘制云雨图
     for idx, method in enumerate(methods):
